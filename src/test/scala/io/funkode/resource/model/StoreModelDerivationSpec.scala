@@ -21,7 +21,7 @@ trait PortfolioSampleModel:
       Map(
         "networks" -> CollectionModel(
           "io.funkode.resource.model.Network",
-          List(RelModel("transactions", "Sequence(io.funkode.resource.model.Transaction)"))
+          List(RelModel("transactions", "io.funkode.resource.model.Transaction", true))
         ),
         "tx" -> CollectionModel(
           "io.funkode.resource.model.Transaction",
@@ -35,8 +35,11 @@ object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(test("Create graph from model") {
 
-      // given portfolioSchema: Schema[Portfolio] = DeriveSchema.gen[Portfolio]
+      // inline given portfolioSchema: Schema[Portfolio] = DeriveSchema.gen[Portfolio]
       val graphModel: ResourceModel = ResourceModelDerivation.gen[Portfolio]
+
+      // given portfolioSchemaEnum: Schema[PortfolioEnum] = DeriveSchema.gen[PortfolioEnum]
       // val graphModelEnum: ResourceModel = ResourceModelDerivation.gen[PortfolioEnum]
+
       assertTrue(graphModel == expectedModel) // && assertTrue(graphModelEnum == expectedModel)
     })

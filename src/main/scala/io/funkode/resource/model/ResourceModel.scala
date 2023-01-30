@@ -6,50 +6,159 @@
 
 package io.funkode.resource.model
 
+import scala.compiletime.*
+import scala.deriving.Mirror
 import scala.quoted.*
 
 import zio.*
-import zio.schema.{DeriveSchema, Schema, TypeId}
+import zio.schema.*
+import zio.schema.Schema.Record
 import zio.schema.meta.MetaSchema
 
-import io.funkode.resource.model
+import ops.any.*
+import ops.string.*
 
 case class ResourceModel(name: String, collections: Map[String, CollectionModel] = Map.empty)
 case class CollectionModel(resourceType: String, rels: List[RelModel] = List.empty)
-case class RelModel(rel: String, targetType: String)
+case class RelModel(rel: String, targetType: String, oneToMany: Boolean = false)
 
 object ResourceModelDerivation:
 
-  inline def decapitalize(inline str: String): String = str match
-    case null | "" => str
-    case nonEmpty  => s"${nonEmpty.head.toLower}${nonEmpty.tail}"
+  import CollectionModelDerivation.given
+  import DerivationUtils.*
 
-  inline def gen[R]: ResourceModel =
-    ${ graphModelForTypeGen[R] }
+  transparent inline def decapitalize(inline str: String): String =
+    inline str match
+      case null | "" => str
+      case nonEmpty  => s"${nonEmpty.head.toLower}${nonEmpty.tail}"
 
-  private def graphModelForTypeGen[R](using t: Type[R])(using Quotes): Expr[ResourceModel] =
+  inline given gen[R](using m: Mirror.Of[R]): ResourceModel =
+    inline val resourceModelLabel = constValue[m.MirroredLabel]
+
+    inline m match
+      case _: Mirror.SumOf[R] =>
+        error("ResourceModel derivation only supported for case classes, found: " + resourceModelLabel)
+      case p: Mirror.ProductOf[R] =>
+        val collectionLabels = deriveMirrorElementNames[p.MirroredElemLabels].map(_.toString)
+        val collectionTypes = getTypeStringFromTuple[p.MirroredElemTypes]
+        val collections: List[CollectionModel] = deriveCollections[p.MirroredElemTypes](collectionTypes)
+
+        val collectionsMap = collectionLabels.zip(collections).toMap
+
+        ResourceModel(decapitalize(resourceModelLabel), collectionsMap)
+
+  inline def deriveCollections[T <: Tuple](collectionTypes: List[String]): List[CollectionModel] =
+    inline erasedValue[T] match
+      case _: EmptyTuple => Nil
+      case _: (t *: ts) =>
+        CollectionModelDerivation.gen[t](collectionTypes)(using
+          summonInline[Mirror.Of[t]]
+        ) :: deriveCollections[ts](collectionTypes)
+
+object CollectionModelDerivation:
+
+  import DerivationUtils.*
+
+  val CollectionPattern = """^.*\.collection\..*\[(.*)\]$""".r
+
+  inline def gen[R](collectionTypes: List[String])(using m: Mirror.Of[R]): CollectionModel =
+    inline m match
+      case _: Mirror.SumOf[R] =>
+        error(
+          "CollectionModel derivation only supported for case classes, found: " + constValue[m.MirroredLabel]
+        )
+      case p: Mirror.ProductOf[R] =>
+        val collectionType = getTypeString[R]
+
+        val attributesNames = deriveMirrorElementNames[p.MirroredElemLabels].map(_.toString)
+        val attributesTypes = getTypeStringFromTuple[p.MirroredElemTypes]
+
+        val attributesNameType = attributesNames.zip(attributesTypes)
+
+        val relAttributes = attributesNameType
+          .map((name, relType) =>
+            relType match
+              case CollectionPattern(baseType) => (name, baseType, true)
+              case _                           => (name, relType, false)
+          )
+          .map(RelModel.apply)
+          .filter(rel => collectionTypes.contains(rel.targetType))
+
+        CollectionModel(collectionType, relAttributes)
+
+  /*
+  given deriveMacro[R](p: Exp[Mirror.Product])(using t: Type[R])(using Quotes): Expr[ResourceModel] =
     import quotes.reflect.*
 
-    val typeRepr = TypeRepr.of[R]
-    println(s"typeOf $typeRepr")
+    Expr.summon[Mirror.Of[R]].get match
+      case '{
+            $m: Mirror.ProductOf[R] {
+              type MirroredLabel = mirrorLabel
+              type MirroredElemTypes = mirrorElemTypes
+              type MirroredElemLabels = mirrorElemLabels
+            }
+          } =>
+        val resourceModelLabel = decapitalize(Type.valueOfConstant[mirrorLabel].map(_.toString()).get)
+        val elemLabels = Type.of[mirrorElemLabels]
+        println(s"elemLabels: $elemLabels")
 
-    val exp = '{
+        val resourceModelName = Expr.apply(resourceModelLabel)
 
-      val schema: Schema[R] = zio.schema.DeriveSchema.gen[R]
-      val metaSchema: MetaSchema = schema.ast
+        val typeRepr = TypeRepr.of[R].toString
 
-      metaSchema match
-        case MetaSchema.Product(id, _, fields, _) =>
-          val graphName = decapitalize(id.name)
-          val collections = fields.map((name, colSchema) => name -> collectionFromSchema(colSchema))
+        val exp = '{ ResourceModel(${ resourceModelName }) }
+        println("ResourceModel derivation: \n" + exp.show)
 
-          ResourceModel(graphName, collections.toMap)
-        case other =>
-          throw RuntimeException("Graph model derivation not supported for current type: " + other)
+        exp
 
-    }
-    println("exp looks like: \n" + exp.show)
-    exp
+      case _ =>
+        throw new NotImplementedError(
+          s"Only case class supported for ResourceModel derivation: " + TypeTree.of[R].show
+        )
+
+   */
+  /*
+  inline given derived[R](using m: Mirror.Of[R]): ResourceModel =
+    inline m match
+      case _: Mirror.SumOf[R] =>
+        error("Resource model derivation only supported for case classes")
+      case p: Mirror.ProductOf[R] =>
+        val mirrorElementsTypes = deriveMirrorElementTypes[m.MirroredElemTypes]
+
+        val mirrorElementsNames = deriveMirrorElementNames[m.MirroredElemLabels].map(_.toString)
+        println("Element names: " + mirrorElementsNames)
+
+        val collections = mirrorElementsTypes.map(_.toString).map(name => CollectionModel(name))
+
+        val collectionsWithRel = collections.map(collection => {
+          val colElementNames = deriveMirrorElementNames[m.MirroredElemLabels].map(_.toString)
+          println("Element names: " + mirrorElementsNames)
+        })
+
+        val collectionsMap = mirrorElementsNames.zip(collections).toMap
+        println("collections: " + collections)
+
+        ResourceModel(decapitalize(p.toString), collectionsMap)
+
+  inline given deriveRelTypes[R](using m: Mirror.Of[R]): ResourceModel =
+    inline m match
+      case _: Mirror.SumOf[R] =>
+        error("Resource model derivation only supported for case classes")
+      case p: Mirror.ProductOf[R] =>
+
+  inline def deriveMirrorElementNames[T <: Tuple]: List[Any] =
+    inline erasedValue[T] match
+      case _: EmptyTuple => Nil
+      case _: (t *: ts)  => typeName[t](using summonInline[ValueOf[t]]) :: deriveMirrorElementNames[ts]
+
+  inline def typeName[R](using M: ValueOf[R]): R =
+    valueOf[R]
+
+  inline def deriveMirrorElementTypes[T <: Tuple]: List[Mirror] =
+    inline erasedValue[T] match
+      case _: EmptyTuple => Nil
+      case _: (t *: ts)  => summonInline[Mirror.Of[t]] :: deriveMirrorElementTypes[ts]
+
 
   extension (typeId: TypeId)
     def fullName: String = typeId match
@@ -100,3 +209,4 @@ object ResourceModelDerivation:
       case e: Schema.Either[?, ?]       => s"Either(${e.left.schemaType}, ${e.right.schemaType})"
       case l: Schema.Lazy[?]            => s"Lazy${l.schema.schemaType}"
       case _: Schema.Dynamic            => "Dynamic"
+   */

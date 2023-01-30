@@ -6,6 +6,8 @@
 
 package io.funkode.resource.model
 
+import ResourceModelDerivation.given
+
 enum PortfolioEnum:
   case Network(
       id: String,
@@ -17,6 +19,7 @@ enum PortfolioEnum:
   case Transaction(network: PortfolioEnum.Network, hash: String, timestamp: Long)
 
 case class Portfolio(networks: Network, tx: Transaction)
+
 case class Network(
     id: String,
     chainId: String,

@@ -28,6 +28,8 @@ object Dependencies {
     val tinkV = "1.7.0"
     val jwtZioJsonV = "9.1.2"
     val web3jV = "5.0.0"
+
+    val shapelessV = "3.3.0"
   }
 
   object Libraries {
@@ -68,5 +70,7 @@ object Dependencies {
     val tink = "com.google.crypto.tink" % "tink" % tinkV
     val jwtZioJson = "com.github.jwt-scala" %% "jwt-zio-json" % jwtZioJsonV
     val web3j = "org.web3j" % "core" % web3jV
+
+    val shapeless = ("org.typelevel" %% "shapeless3-deriving" % shapelessV)
   }
 }

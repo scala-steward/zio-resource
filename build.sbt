@@ -60,7 +60,7 @@ lazy val root =
     .settings(headerSettings(Test, IntegrationTest))
     .settings(Seq(
       name := "zio-resource",
-      libraryDependencies ++= (commonLibs ++ testLibs ++ Seq(zioSchema, zioArangodb)),
+      libraryDependencies ++= (commonLibs ++ testLibs ++ Seq(zioSchema, zioArangodb, shapeless)),
       testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")),
       releasePublishArtifactsAction := PgpKeys.publishSigned.value,
       headerLicense := Some(HeaderLicense.MIT("2023", "Carlos Verdes", HeaderLicenseStyle.SpdxSyntax)),
