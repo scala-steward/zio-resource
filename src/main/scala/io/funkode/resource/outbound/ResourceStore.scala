@@ -29,8 +29,6 @@ trait ResourceStore[Encoder[_], Decoder[_], Document]:
 
   type DocResource = Resource[Encoder, Decoder, Document]
 
-  def initStore(resourceModel: ResourceModel): ResourceApiCall[Unit]
-
   def fetch(urn: Urn): ResourceApiCall[DocResource]
   def store(urn: Urn, document: Document): ResourceApiCall[DocResource]
   def store[R: Encoder](urn: Urn, r: R): ResourceApiCall[DocResource]
@@ -48,8 +46,6 @@ object JsonStore:
   type WithJsonStore[R] = ZIO[JsonStore, ResourceError, R]
 
   def withStore[R](f: JsonStore => WithJsonStore[R]) = ZIO.service[JsonStore].flatMap(f)
-
-  def initStore(graphModel: ResourceModel): WithJsonStore[Unit] = withStore(_.initStore(graphModel))
 
   def fetch(urn: Urn): WithJsonStore[JsonResource] = withStore(_.fetch(urn))
 

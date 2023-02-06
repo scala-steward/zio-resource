@@ -13,19 +13,22 @@ import zio.json.*
 import zio.schema.*
 import zio.test.*
 
+import io.funkode.portfolio.model.*
+
 trait PortfolioSampleModel:
 
+  val mainPackage = "io.funkode.portfolio.model"
   val expectedModel =
     ResourceModel(
       "portfolio",
       Map(
-        "networks" -> CollectionModel(
-          "io.funkode.resource.model.Network",
-          List(RelModel("transactions", "io.funkode.resource.model.Transaction", true))
+        "network" -> CollectionModel(
+          s"$mainPackage.Network",
+          List(RelModel("transactions", s"$mainPackage.Transaction", true))
         ),
         "tx" -> CollectionModel(
-          "io.funkode.resource.model.Transaction",
-          List(RelModel("network", "io.funkode.resource.model.Network"))
+          s"$mainPackage.Transaction",
+          List(RelModel("network", s"$mainPackage.Network"))
         )
       )
     )

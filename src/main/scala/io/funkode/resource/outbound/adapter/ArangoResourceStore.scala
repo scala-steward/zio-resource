@@ -8,6 +8,8 @@ package io.funkode.resource
 package outbound
 package adapter
 
+import scala.deriving.Mirror
+
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
@@ -19,54 +21,35 @@ import zio.stream.*
 import io.funkode.arangodb.http.*
 import io.funkode.arangodb.http.JsonCodecs.given
 import io.funkode.arangodb.model.*
-import io.funkode.resource.model.*
+import io.funkode.resource.model.{ResourceModelDerivation, *}
 import io.funkode.resource.model.Resource.Identifiable
 import io.funkode.velocypack.VPack.VObject
 
-class ArangoResourceStore(arango: ArangoClientJson) extends JsonStore:
+class ArangoResourceStore(db: ArangoDatabaseJson) extends JsonStore:
 
   import ArangoResourceStore.*
   import ArangoResourceStore.given
 
-  def initStore(resourceModel: ResourceModel): ResourceApiCall[Unit] =
-    // val db = arango.database(DatabaseName(resourceModel.name))
-    val db = arango.db
-
-    db.createIfNotExist().handleErrors() *>
-      ZIO
-        .collectAll {
-          resourceModel.collections
-            .map(_._1)
-            .map(CollectionName.apply)
-            .map(col => db.collection(col).createIfNotExist())
-        }
-        .handleErrors() *>
-      ZIO.unit
-
-  /*
-    storeModel.graphs.flatMap(graph =>
-      val graphName = GraphName(graph.name)
-      val edges = collections.flatMap(_.relationships.map(_.rel))
-
-      edges.flatMap(edge => )
-
-      val collections = graph.collections
-
-      val fromCollections = collections.filter(_.relationships.nonEmpty).map(_.name)
-      val toCollections = collections.flatMap(_.relationships.map(_.targetCollection))
-    )*/
-
   def fetch(urn: Urn): ResourceApiCall[JsonResource] =
-    arango.db
+    db
       .document(urn)
       .read[Json]()
       .handleErrors(Some(urn))
       .map(_.asResource)
 
   def store(urn: Urn, document: Json): ResourceApiCall[JsonResource] =
+    println(s"""
+         |Storing urn: $urn
+         |
+         |document handler: ${fromUrnToDocHandle(urn)}
+         |
+         |document:
+         |${document.toJsonPretty}
+         |
+         |""".stripMargin)
     document match
       case jsonObj: Json.Obj =>
-        arango.db
+        db
           .document(urn)
           .upsert(JsonCodecs.jsonObjectToVObject(jsonObj))
           .handleErrors()
@@ -142,8 +125,25 @@ object ArangoResourceStore:
           .fromEither(json.as[R])
           .catchAll(decodeError => ZIO.fail(ResourceError.SerializationError(decodeError)))
 
-  val live: ZLayer[ArangoClientJson, Nothing, JsonStore] =
+  def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
+    val db = arango.database(DatabaseName(resourceModel.name))
+
+    db.createIfNotExist().handleErrors() *>
+      ZIO
+        .collectAll {
+          resourceModel.collections
+            .map(_._1)
+            .map(CollectionName.apply)
+            .map(col => db.collection(col).createIfNotExist())
+        }
+        .handleErrors() *>
+      ZIO.succeed(db)
+
+  inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, JsonStore] =
     ZLayer(
-      for client <- ZIO.service[ArangoClientJson]
-      yield new ArangoResourceStore(client)
+      for
+        client <- ZIO.service[ArangoClientJson]
+        resourceModel = ResourceModelDerivation.gen[R]
+        db <- initDb(client, resourceModel)
+      yield new ArangoResourceStore(db)
     )
