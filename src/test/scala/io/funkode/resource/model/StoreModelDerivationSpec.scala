@@ -39,7 +39,7 @@ object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel
     suite("Arango ResourceStore should")(test("Create graph from model") {
 
       // inline given portfolioSchema: Schema[Portfolio] = DeriveSchema.gen[Portfolio]
-      val graphModel: ResourceModel = ResourceModelDerivation.gen[Portfolio]
+      val graphModel: ResourceModel = DeriveResourceModel.gen[Portfolio]
 
       // given portfolioSchemaEnum: Schema[PortfolioEnum] = DeriveSchema.gen[PortfolioEnum]
       // val graphModelEnum: ResourceModel = ResourceModelDerivation.gen[PortfolioEnum]

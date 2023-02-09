@@ -12,7 +12,7 @@ import scala.compiletime.ops.string.*
 import scala.deriving.Mirror
 import scala.quoted.*
 
-object ResourceModelDerivation:
+object DeriveResourceModel:
 
   import CollectionModelDerivation.given
   import DerivationUtils.*
@@ -35,8 +35,8 @@ object ResourceModelDerivation:
         val collectionsMap = collectionLabels.zip(collections).toMap
 
         ResourceModel(decapitalize(resourceModelLabel), collectionsMap)
-      case p: Mirror.ProductOf[R] =>
-        error("ResourceModel derivation only supported for enum types, found: " + resourceModelLabel)
+      case _: Mirror.ProductOf[R] =>
+        error("ResourceModel derivation only supported for sealed traits, found: " + resourceModelLabel)
 
   inline def deriveCollectionNames[T <: Tuple]: List[String] =
     inline erasedValue[T] match

@@ -41,6 +41,7 @@ trait Resource[Encoder[_], Decoder[_], Body]:
   def body: Body
   def deserialize[R: Decoder]: ResourceCall[R]
 
+  // TODO add type/schema
   def etag: Option[Etag]
 
   def links: ResourceLinks = Map.empty

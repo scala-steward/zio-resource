@@ -21,7 +21,7 @@ import zio.stream.*
 import io.funkode.arangodb.http.*
 import io.funkode.arangodb.http.JsonCodecs.given
 import io.funkode.arangodb.model.*
-import io.funkode.resource.model.{ResourceModelDerivation, *}
+import io.funkode.resource.model.*
 import io.funkode.resource.model.Resource.Identifiable
 import io.funkode.velocypack.VPack.VObject
 
@@ -143,7 +143,7 @@ object ArangoResourceStore:
     ZLayer(
       for
         client <- ZIO.service[ArangoClientJson]
-        resourceModel = ResourceModelDerivation.gen[R]
+        resourceModel = DeriveResourceModel.gen[R]
         db <- initDb(client, resourceModel)
       yield new ArangoResourceStore(db)
     )
