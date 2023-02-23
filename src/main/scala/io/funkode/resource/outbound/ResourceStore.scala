@@ -19,25 +19,37 @@ import zio.schema.*
 import zio.schema.meta.MetaSchema
 import zio.stream.*
 
-import model.*
-import Resource.*
+import io.funkode.resource.model.*
 
 type ResourceApiCall[R] = IO[ResourceError, R]
-type ResourceStream[R] = Stream[ResourceError, R]
 
-trait ResourceStore[Encoder[_], Decoder[_], Document]:
+trait ResourceStore:
 
-  type DocResource = Resource[Encoder, Decoder, Document]
+  def fetch(urn: Urn): ResourceApiCall[Resource]
+  def store(resource: Resource): ResourceApiCall[Resource]
 
-  def fetch(urn: Urn): ResourceApiCall[DocResource]
-  def store(urn: Urn, document: Document): ResourceApiCall[DocResource]
-  def store[R: Encoder](urn: Urn, r: R): ResourceApiCall[DocResource]
+  def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
+  def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
-  def store[R: Encoder: Identifiable](r: R): ResourceApiCall[DocResource] = store(r.urn, r)
+object ResourceStore:
 
-  // def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
-  // def fetchRel(urn: Urn, relType: String): ResourceStream[DocResource]
+  type WithResourceStore[R] = ZIO[ResourceStore, ResourceError, R]
+  type WithResourceStreamStore[R] = ZStream[ResourceStore, ResourceError, R]
 
+  def withStore[R](f: ResourceStore => WithResourceStore[R]) = ZIO.service[ResourceStore].flatMap(f)
+
+  def fetch(urn: Urn): WithResourceStore[Resource] = withStore(_.fetch(urn))
+
+  def store(resource: Resource): WithResourceStore[Resource] =
+    withStore(_.store(resource))
+
+  def link(leftUrn: Urn, relType: String, rightUrn: Urn): WithResourceStore[Unit] =
+    withStore(_.link(leftUrn, relType, rightUrn))
+
+  def fetchRel(urn: Urn, relType: String): WithResourceStreamStore[Resource] =
+    ZStream.service[ResourceStore].flatMap(_.fetchRel(urn, relType))
+
+/*
 trait JsonStore extends ResourceStore[JsonEncoder, JsonDecoder, Json]:
   override type DocResource = JsonResource
 
@@ -56,3 +68,4 @@ object JsonStore:
 
   extension (resourceIO: WithJsonStore[JsonResource])
     def deserialize[R: JsonDecoder] = resourceIO.flatMap(_.deserialize[R])
+ */

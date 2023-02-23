@@ -33,16 +33,16 @@ case class Transaction(
 
 object Portfolio:
 
-  given Resource.Identifiable[Network] with
-    def nid: String = "network"
-    def resourceNss(r: Network): String = r.id
-    def resourceWithNss(n: Network)(newNss: String): Network = n.copy(id = newNss)
+  given Resource.Typed[Network] with
+    def resourceCollection: String = "network"
+    def resourceId(r: Network): String = r.id
+    def resourceWithId(n: Network)(newId: String): Network = n.copy(id = newId)
 
-  given Resource.Identifiable[Transaction] with
-    def nid: String = "tx"
-    def resourceNss(transaction: Transaction): String =
-      s"${transaction.hash}@${transaction.network.nss}"
-    def resourceWithNss(transaction: Transaction)(newNss: String): Transaction =
-      val Array(newHash, newNetworkNss) = newNss.split("@")
-      val newNetwork = transaction.network.withNss(newNetworkNss)
+  given Resource.Typed[Transaction] with
+    def resourceCollection: String = "tx"
+    def resourceId(transaction: Transaction): String =
+      s"${transaction.hash}@${transaction.network.id}"
+    def resourceWithId(transaction: Transaction)(newId: String): Transaction =
+      val Array(newHash, newNetworkId) = newId.split("@")
+      val newNetwork = transaction.network.withId(newNetworkId)
       transaction.copy(network = newNetwork, hash = newHash)

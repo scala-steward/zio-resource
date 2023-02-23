@@ -14,68 +14,87 @@ import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
-import zio.schema.*
-import zio.schema.codec.JsonCodec.*
 import zio.stream.*
 
 import io.funkode.arangodb.http.*
 import io.funkode.arangodb.http.JsonCodecs.given
 import io.funkode.arangodb.model.*
 import io.funkode.resource.model.*
-import io.funkode.resource.model.Resource.Identifiable
-import io.funkode.velocypack.VPack.VObject
+import io.funkode.velocypack.VPack.*
 
-class ArangoResourceStore(db: ArangoDatabaseJson) extends JsonStore:
+class ArangoResourceStore(db: ArangoDatabaseJson) extends ResourceStore:
 
   import ArangoResourceStore.*
   import ArangoResourceStore.given
+  implicit val jsonCodec: JsonCodec[Json] = JsonCodec[Json](Json.encoder, Json.decoder)
 
-  def fetch(urn: Urn): ResourceApiCall[JsonResource] =
+  case class Rel(_rel: String, _from: DocumentHandle, _to: DocumentHandle, _key: DocumentKey)
+      derives JsonCodec
+
+  private def relCollection(urn: Urn): CollectionName = CollectionName(urn.nid + "-rels")
+
+  private def linkKey(rel: String, rightUrn: Urn) =
+    DocumentKey(s"""${rel}:${rightUrn.nid}:${rightUrn.nss}""")
+
+  def fetch(urn: Urn): ResourceApiCall[Resource] =
     db
       .document(urn)
-      .read[Json]()
+      .readRaw()
       .handleErrors(Some(urn))
-      .map(_.asResource)
+      .map(stream => Resource.apply(urn, stream.handleStreamErrors(Some(urn))))
 
-  def store(urn: Urn, document: Json): ResourceApiCall[JsonResource] =
-    println(s"""
-         |Storing urn: $urn
-         |
-         |document handler: ${fromUrnToDocHandle(urn)}
-         |
-         |document:
-         |${document.toJsonPretty}
-         |
-         |""".stripMargin)
-    document match
-      case jsonObj: Json.Obj =>
-        db
-          .document(urn)
-          .upsert(JsonCodecs.jsonObjectToVObject(jsonObj))
-          .handleErrors()
-          .flatMap(vpack =>
-            ZIO
-              .fromEither[String, Json](vobjectEncoder.toJsonAST(vpack))
-              .catchAll(encodeError => ZIO.fail(ResourceError.SerializationError(encodeError)))
-          )
-          .map(_.asResource)
+  def store(resource: Resource): ResourceApiCall[Resource] =
+    resource.format match
+      case ResourceFormat.Json =>
+        val urn = resource.id
 
-      case other =>
-        ZIO.fail(ResourceError.FormatError(s"only supported to store json objects, received $other"))
+        for
+          jsonDocument <- JsonDecoder[Json].decodeJsonStreamInput(resource.body).catchAll {
+            case t: Throwable =>
+              ZIO.fail(ResourceError.SerializationError("Error reading json resource body", Some(t)))
+          }
+          vobject <- jsonDocument match
+            case jsonObj: Json.Obj =>
+              ZIO.succeed(JsonCodecs.jsonObjectToVObject(jsonObj))
+            case other =>
+              ZIO.fail(ResourceError.FormatError(s"only supported to store json objects, received $other"))
+          savedResource <- db
+            .document(urn)
+            .upsert(vobject)
+            .handleErrors(Some(urn))
+            .flatMap(vpack =>
+              ZIO
+                .fromEither[String, Json](vobjectEncoder.toJsonAST(vpack))
+                .catchAll(encodeError => ZIO.fail(ResourceError.SerializationError(encodeError)))
+            )
+            .map(_.asResource)
+        yield savedResource
 
-  def store[R: JsonEncoder](urn: Urn, r: R): ResourceApiCall[JsonResource] =
-    ZIO
-      .fromEither(r.toJsonAST)
-      .catchAll(encodeError => ZIO.fail(ResourceError.SerializationError(encodeError)))
-      .flatMap(json => store(urn, json))
+  def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    db.collection(relCollection(leftUrn))
+      .documents
+      .create(List(Rel(rel, leftUrn, rightUrn, linkKey(rel, rightUrn))))
+      .handleErrors()
+      .map(_ => ())
 
-  // def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] = ???
-  // def fetchRel(urn: Urn, relType: String): ResourceStream[JsonResource] = ???
+  def fetchRel(urn: Urn, relType: String): Stream[ResourceError, Resource] =
+    db
+      .query(
+        Query("FOR v, e IN OUTBOUND @startVertex @@edge FILTER e._rel == @relType RETURN v")
+          .bindVar("startVertex", VString(fromUrnToDocHandle(urn).unwrap))
+          .bindVar("@edge", VString(relCollection(urn).unwrap))
+          .bindVar("relType", VString(relType))
+      )
+      .stream[Json]
+      .map(json => json.asResource)
+      .handleStreamErrors()
 
 object ArangoResourceStore:
 
   import ArangoError.*
   import ResourceError.*
+
+  val RelsCollection = CollectionName("rels")
 
   val InternalKeys = Seq(VObject.IdKey, VObject.KeyKey, VObject.RevKey)
 
@@ -85,12 +104,17 @@ object ArangoResourceStore:
   given fromDocHandleToUrn: Conversion[DocumentHandle, Urn] = docHandle =>
     Urn.parse(s"urn:${docHandle.collection.unwrap}:${docHandle.key.unwrap}")
 
-  extension [R](arangoIO: IO[ArangoError, R])
-    def handleErrors(urn: Option[Urn] = None): ResourceApiCall[R] = arangoIO.catchAll {
+  def handleArrangoErrors(urn: Option[Urn], t: Throwable): ResourceError = t match
+    case e @ ArangoError(404, _, message, _) => ResourceError.NotFoundError(urn, Some(e))
+    case e                                   => ResourceError.UnderlinedError(e)
 
-      case ArangoError(404, error, errorMessage, _) => ZIO.fail(ResourceError.NotFoundError(urn))
-      case e                                        => ZIO.fail(ResourceError.UnderlinedError(e))
-    }
+  extension [R](io: IO[Throwable, R])
+    def handleErrors(urn: Option[Urn] = None): ResourceApiCall[R] =
+      io.catchAll(t => ZIO.fail(handleArrangoErrors(urn, t)))
+
+  extension [R](stream: Stream[Throwable, R])
+    def handleStreamErrors(urn: Option[Urn] = None): ResourceStream[R] =
+      stream.catchAll(t => ZStream.fail(handleArrangoErrors(urn, t)))
 
   extension (json: Json)
     def etag: Option[Etag] = json match
@@ -113,33 +137,33 @@ object ArangoResourceStore:
       case Json.Obj(fields) => Json.Obj(fields.filterNot(t => InternalKeys.contains(t._1)))
       case other            => other
 
-    def asResource: JsonResource =
-      new JsonResource:
-        def id: Urn = fromDocHandleToUrn(json.documentHandle)
+    def asResource: Resource =
+      val urn: Urn = fromDocHandleToUrn(json.documentHandle)
+      val body: ByteResourceStream = ZStream.fromIterable(json.pure.toJson.toCharArray.map(_.toByte))
+      val etag: Option[Etag] = json.etag
 
-        def body: Json = json.pure
-
-        def etag: Option[Etag] = json.etag
-
-        def deserialize[R: JsonDecoder]: IO[ResourceError, R] = ZIO
-          .fromEither(json.as[R])
-          .catchAll(decodeError => ZIO.fail(ResourceError.SerializationError(decodeError)))
+      Resource(urn, body, ResourceFormat.Json, etag)
 
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))
 
-    db.createIfNotExist().handleErrors() *>
+    (db.createIfNotExist() *>
       ZIO
         .collectAll {
-          resourceModel.collections
+          val createCollections = resourceModel.collections
             .map(_._1)
             .map(CollectionName.apply)
             .map(col => db.collection(col).createIfNotExist())
-        }
-        .handleErrors() *>
+
+          val createRels = resourceModel.collections
+            .map(c => CollectionName(c._1 + "-rels"))
+            .map(col => db.collection(col).createEdgeIfNotExist())
+
+          createCollections ++ createRels
+        }).handleErrors() *>
       ZIO.succeed(db)
 
-  inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, JsonStore] =
+  inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
     ZLayer(
       for
         client <- ZIO.service[ArangoClientJson]
