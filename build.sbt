@@ -9,7 +9,7 @@ IntegrationTest / fork := true
 inThisBuild(
   Seq(
     resolvers ++= Resolver.sonatypeOssRepos("releases"),
-    organization := "io.github.olegefrem",
+    organization := "io.funkode",
     scalaVersion := "3.2.2-RC1",
     versionScheme := Some("early-semver"),
     semanticdbEnabled := true,
