@@ -25,6 +25,8 @@ type ResourceApiCall[R] = IO[ResourceError, R]
 
 trait ResourceStore:
 
+  def resourceModel: ResourceModel
+
   def fetch(urn: Urn): ResourceApiCall[Resource]
   def store(resource: Resource): ResourceApiCall[Resource]
 

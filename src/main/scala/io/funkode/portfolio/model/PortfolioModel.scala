@@ -12,7 +12,7 @@ import zio.json.*
 
 import io.funkode.resource.model.*
 
-sealed trait Portfolio {}
+sealed trait Portfolio
 
 case class Network(
     id: String,

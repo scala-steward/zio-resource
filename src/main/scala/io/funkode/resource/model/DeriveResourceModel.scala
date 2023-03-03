@@ -30,10 +30,10 @@ object DeriveResourceModel:
         val collectionLabels = deriveCollectionNames[sum.MirroredElemTypes]
         val collectionTypes = getTypeStringFromTuple[sum.MirroredElemTypes]
 
-        val collections: List[CollectionModel] = deriveCollections[sum.MirroredElemTypes](collectionTypes)
+        val nameForTypeMap = collectionTypes.zip(collectionLabels).toMap
+        val collections: List[CollectionModel] = deriveCollections[sum.MirroredElemTypes](nameForTypeMap)
 
         val collectionsMap = collectionLabels.zip(collections).toMap
-
         ResourceModel(decapitalize(resourceModelLabel), collectionsMap)
       case _: Mirror.ProductOf[R] =>
         error("ResourceModel derivation only supported for sealed traits, found: " + resourceModelLabel)
@@ -45,13 +45,13 @@ object DeriveResourceModel:
         val identifiable: Resource.Typed[t] = summonInline[Resource.Typed[t]]
         identifiable.resourceCollection +: deriveCollectionNames[ts]
 
-  inline def deriveCollections[T <: Tuple](collectionTypes: List[String]): List[CollectionModel] =
+  inline def deriveCollections[T <: Tuple](nameForTypeMap: Map[String, String]): List[CollectionModel] =
     inline erasedValue[T] match
       case _: EmptyTuple => Nil
       case _: (t *: ts) =>
-        CollectionModelDerivation.gen[t](collectionTypes)(using
+        CollectionModelDerivation.gen[t](nameForTypeMap)(using
           summonInline[Mirror.Of[t]]
-        ) :: deriveCollections[ts](collectionTypes)
+        ) :: deriveCollections[ts](nameForTypeMap)
 
 object CollectionModelDerivation:
 
@@ -59,7 +59,7 @@ object CollectionModelDerivation:
 
   val CollectionPattern = """^.*\.collection\..*\[(.*)\]$""".r
 
-  inline def gen[R](collectionTypes: List[String])(using m: Mirror.Of[R]): CollectionModel =
+  inline def gen[R](nameForTypeMap: Map[String, String])(using m: Mirror.Of[R]): CollectionModel =
     inline m match
       case _: Mirror.SumOf[R] =>
         error(
@@ -67,6 +67,8 @@ object CollectionModelDerivation:
         )
       case p: Mirror.ProductOf[R] =>
         val collectionType = getTypeString[R]
+
+        val collectionName = nameForTypeMap.get(collectionType).get // this .get should never fail
 
         val attributesNames = deriveMirrorElementNames[p.MirroredElemLabels].map(_.toString)
         val attributesTypes = getTypeStringFromTuple[p.MirroredElemTypes]
@@ -80,6 +82,6 @@ object CollectionModelDerivation:
               case _                           => (name, relType, false)
           )
           .map(RelModel.apply)
-          .filter(rel => collectionTypes.contains(rel.targetType))
+          .filter(rel => nameForTypeMap.contains(rel.targetType))
 
-        CollectionModel(collectionType, relAttributes)
+        CollectionModel(collectionName, collectionType, relAttributes)

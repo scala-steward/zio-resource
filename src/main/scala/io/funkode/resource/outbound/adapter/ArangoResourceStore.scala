@@ -22,7 +22,7 @@ import io.funkode.arangodb.model.*
 import io.funkode.resource.model.*
 import io.funkode.velocypack.VPack.*
 
-class ArangoResourceStore(db: ArangoDatabaseJson) extends ResourceStore:
+class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) extends ResourceStore:
 
   import ArangoResourceStore.*
   import ArangoResourceStore.given
@@ -35,6 +35,8 @@ class ArangoResourceStore(db: ArangoDatabaseJson) extends ResourceStore:
 
   private def linkKey(rel: String, rightUrn: Urn) =
     DocumentKey(s"""${rel}:${rightUrn.nid}:${rightUrn.nss}""")
+
+  def resourceModel: ResourceModel = storeModel
 
   def fetch(urn: Urn): ResourceApiCall[Resource] =
     db
@@ -169,5 +171,5 @@ object ArangoResourceStore:
         client <- ZIO.service[ArangoClientJson]
         resourceModel = DeriveResourceModel.gen[R]
         db <- initDb(client, resourceModel)
-      yield new ArangoResourceStore(db)
+      yield new ArangoResourceStore(db, resourceModel)
     )

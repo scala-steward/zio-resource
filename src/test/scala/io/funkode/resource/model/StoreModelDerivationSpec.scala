@@ -18,19 +18,19 @@ import io.funkode.portfolio.model.*
 trait PortfolioSampleModel:
 
   val mainPackage = "io.funkode.portfolio.model"
+
+  val networkCollectionModel = CollectionModel(
+    "network",
+    s"$mainPackage.Network",
+    List(RelModel("transactions", s"$mainPackage.Transaction", true))
+  )
+  val txCollectionModel =
+    CollectionModel("tx", s"$mainPackage.Transaction", List(RelModel("network", s"$mainPackage.Network")))
+
   val expectedModel =
     ResourceModel(
       "portfolio",
-      Map(
-        "network" -> CollectionModel(
-          s"$mainPackage.Network",
-          List(RelModel("transactions", s"$mainPackage.Transaction", true))
-        ),
-        "tx" -> CollectionModel(
-          s"$mainPackage.Transaction",
-          List(RelModel("network", s"$mainPackage.Network"))
-        )
-      )
+      Map("network" -> networkCollectionModel, "tx" -> txCollectionModel)
     )
 
 object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel:
