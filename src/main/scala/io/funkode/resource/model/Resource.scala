@@ -204,6 +204,12 @@ object Resource:
       links: ResourceLinks = Map.empty
   ) = Resource.Of(id, ZIO.succeed(typedBody), etag, links)
 
+  def fromTypedClass[R: Resource.Typed](
+      typedBody: R,
+      etag: Option[Etag] = None,
+      links: ResourceLinks = Map.empty
+  ) = fromCaseClass(typedBody.urn, typedBody, etag, links)
+
   given fromRawResourceToTypedResource[R](using JsonDecoder[R]): Conversion[Resource, Resource.Of[R]] =
     resource =>
       val parsedBody = JsonDecoder[R].decodeJsonStreamInput(resource.body).catchAll { case t: Throwable =>

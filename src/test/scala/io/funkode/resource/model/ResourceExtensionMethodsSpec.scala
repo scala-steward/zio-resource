@@ -32,7 +32,7 @@ trait ResourceExamples:
 
     given Resource.Typed[User] with
       def resourceCollection: String = "user"
-      def resourceId(user: User): String = user.name
+      def resourceId(user: User): String = user.id
       def resourceWithId(user: User)(newId: String): User = user.copy(id = newId)
 
     given Resource.Typed[Book] with
@@ -40,7 +40,7 @@ trait ResourceExamples:
       def resourceId(book: Book): String = book.isbn
       def resourceWithId(book: Book)(newId: String): Book = book.copy(isbn = newId)
 
-  val jsonResourceUrn = Urn.parse("urn:user:peter")
+  val jsonResourceUrn = Urn.parse("urn:user:123")
   val jsonResourceBody = """
       |{
       |  "id": "123",
@@ -51,7 +51,7 @@ trait ResourceExamples:
   val jsonResource: Resource = Resource.fromString(jsonResourceUrn, jsonResourceBody)
 
   val personResource: Resource.Of[User] =
-    Resource.fromCaseClass(jsonResourceUrn, User("123", "Peter", 23))
+    Resource.fromTypedClass(User("123", "Peter", 23))
 
   val catalogUrn = Urn.parse("urn:catalog:mainCatalog")
   val authorUrn = Urn.parse("urn:author:miguel-cervantes")
