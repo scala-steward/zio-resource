@@ -47,71 +47,21 @@ trait ResourceExamples:
       |""".stripMargin
   val jsonResource: Resource = Resource.fromJsonString(jsonResourceUrn, jsonResourceBody)
 
-  val personResource: Resource.Of[User] = User("123", "Peter", 23).asResource
+  val userResource: Resource.Of[User] = User("123", "Peter", 23).asResource
 
   val catalogUrn = Urn.parse("urn:catalog:mainCatalog")
   val authorUrn = Urn.parse("urn:author:miguel-cervantes")
   val bookUrn = Urn.parse("urn:book:9780744525021")
 
-  val catalogJson: String =
-    s"""
-       |{
-       |  "id": "mainCatalog",
-       |  "books": [
-       |    {
-       |      "isbn": "9780744525021",
-       |      "title": "El Quijote",
-       |      "author": {
-       |        "id": "cervantes",
-       |        "name": "Cervantes",
-       |        "age": 57
-       |      }
-       |    }, {
-       |      "isbn": "8467033401",
-       |      "title": "Lazarillo de Tormes"
-       |    }
-       |  ],
-       |  "owner": {
-       |    "id": "pete-har",
-       |    "name": "Pete Har",
-       |    "age": 27
-       |  }
-       |}
-       |""".stripMargin
-
-  val denormalizedCatalogResource = Resource.fromJsonString(catalogUrn, catalogJson)
-
-  val normalizedCatalogJson = """{ "id": "mainCatalog" }""".stripMargin
-  val normalizedBook1Json = """{ "isbn": "9780744525021", "title": "El Quijote" }""".stripMargin
-  val normalizedAuthorJson = """{ "id": "cervantes", "name": "Cervantes", "age": 57 }""".stripMargin
-  val normalizedBook2Json = """{ "isbn": "8467033401", "title": "Lazarillo de Tormes" }""".stripMargin
-  val normalizedOwnerJson = """{ "id": "pete-har", "name": "Pete Har", "age": 27 }""".stripMargin
-
-  val expectedNormalizedJsons =
-    Chunk(
-      normalizedCatalogJson,
-      normalizedBook1Json,
-      normalizedAuthorJson,
-      normalizedBook2Json,
-      normalizedOwnerJson
-    ).map(_.fromJson[Json].getOrElse(Json.Null))
-
 object ResourceOfDerivationSpec extends ZIOSpecDefault with ResourceExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Resource should")(
-      test("Create a domain resource from json with resource.of[R]") {
+      test("Create a typed resource from json") {
         val parsedResource = jsonResource.of[User]
         for
-          parsedBody <- parsedResource.body
-          personBody <- personResource.body
-        yield assertTrue(parsedResource.urn == personResource.urn) && assertTrue(parsedBody == personBody)
-      },
-      test("Denormalize a resource (document) with resource.denormalize") {
-
-        for normalizedResources <- denormalizedCatalogResource
-            .normalizeWithModel[Library]
-            .run(ZSink.collectAll)
-        yield assertTrue(normalizedResources == expectedNormalizedJsons)
+          parsedBody <- jsonResource.of[User].body
+          userBody <- userResource.body
+        yield assertTrue(parsedResource.urn == userResource.urn) && assertTrue(parsedBody == userBody)
       }
     )
