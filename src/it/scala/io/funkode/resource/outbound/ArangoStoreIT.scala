@@ -98,7 +98,7 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
         assertTrue(storedNetwork == fetchedNetwork) &&
         assertTrue(storedTx == tx1) &&
         assertTrue(storedTx == fetchedTx) &&
-        assertTrue(transactionNetworkResource.map(_.id) == Some(ethNetworkUrn)) &&
+        assertTrue(transactionNetworkResource.map(_.urn) == Some(ethNetworkUrn)) &&
         assertTrue(transactionNetwork == ethNetwork) &&
         assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2))
 

@@ -42,8 +42,8 @@ object DeriveResourceModel:
     inline erasedValue[T] match
       case _: EmptyTuple => Nil
       case _: (t *: ts) =>
-        val identifiable: Resource.Typed[t] = summonInline[Resource.Typed[t]]
-        identifiable.resourceCollection +: deriveCollectionNames[ts]
+        val addressable: Resource.Addressable[t] = summonInline[Resource.Addressable[t]]
+        addressable.resourceNid +: deriveCollectionNames[ts]
 
   inline def deriveCollections[T <: Tuple](nameForTypeMap: Map[String, String]): List[CollectionModel] =
     inline erasedValue[T] match

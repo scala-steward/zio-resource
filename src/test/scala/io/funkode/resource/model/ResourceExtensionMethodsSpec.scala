@@ -25,20 +25,17 @@ trait ResourceExamples:
 
   object Library:
 
-    given Resource.Typed[Catalog] with
-      def resourceCollection: String = "catalog"
-      def resourceId(catalog: Catalog): String = catalog.id
-      def resourceWithId(catalog: Catalog)(newId: String): Catalog = catalog.copy(id = newId)
+    given Resource.Addressable[Catalog] with
+      def resourceNid: String = "catalog"
+      def resourceNss(catalog: Catalog): String = catalog.id
 
-    given Resource.Typed[User] with
-      def resourceCollection: String = "user"
-      def resourceId(user: User): String = user.id
-      def resourceWithId(user: User)(newId: String): User = user.copy(id = newId)
+    given Resource.Addressable[User] with
+      def resourceNid: String = "user"
+      def resourceNss(user: User): String = user.id
 
-    given Resource.Typed[Book] with
-      def resourceCollection: String = "book"
-      def resourceId(book: Book): String = book.isbn
-      def resourceWithId(book: Book)(newId: String): Book = book.copy(isbn = newId)
+    given Resource.Addressable[Book] with
+      def resourceNid: String = "book"
+      def resourceNss(book: Book): String = book.isbn
 
   val jsonResourceUrn = Urn.parse("urn:user:123")
   val jsonResourceBody = """
@@ -50,8 +47,7 @@ trait ResourceExamples:
       |""".stripMargin
   val jsonResource: Resource = Resource.fromJsonString(jsonResourceUrn, jsonResourceBody)
 
-  val personResource: Resource.Of[User] =
-    Resource.fromTypedClass(User("123", "Peter", 23))
+  val personResource: Resource.Of[User] = User("123", "Peter", 23).asResource
 
   val catalogUrn = Urn.parse("urn:catalog:mainCatalog")
   val authorUrn = Urn.parse("urn:author:miguel-cervantes")
@@ -109,7 +105,7 @@ object ResourceOfDerivationSpec extends ZIOSpecDefault with ResourceExamples:
         for
           parsedBody <- parsedResource.body
           personBody <- personResource.body
-        yield assertTrue(parsedResource.id == personResource.id) && assertTrue(parsedBody == personBody)
+        yield assertTrue(parsedResource.urn == personResource.urn) && assertTrue(parsedBody == personBody)
       },
       test("Denormalize a resource (document) with resource.denormalize") {
 

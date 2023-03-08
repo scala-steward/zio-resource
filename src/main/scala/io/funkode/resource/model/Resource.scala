@@ -42,7 +42,7 @@ case class ResourceLink(urn: Urn, rel: String, attributes: Map[String, String] =
 type ResourceLinks = Map[String, ResourceLink]
 
 case class Resource(
-    id: Urn,
+    urn: Urn,
     body: ByteResourceStream,
     format: ResourceFormat = ResourceFormat.Json,
     etag: Option[Etag] = None,
@@ -52,28 +52,28 @@ case class Resource(
 object Resource:
 
   case class Of[R](
-      id: Urn,
+      urn: Urn,
       body: IO[ResourceError, R],
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
   )
 
   def fromJsonString(
-      id: Urn,
+      urn: Urn,
       bodyString: String,
       format: ResourceFormat = ResourceFormat.Json,
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
-  ): Resource = Resource(id, ZStream.fromIterable(bodyString.getBytes), format, etag, links)
+  ): Resource = Resource(urn, ZStream.fromIterable(bodyString.getBytes), format, etag, links)
 
   def fromCaseClass[R](
-      id: Urn,
+      urn: Urn,
       typedBody: R,
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
-  ) = Resource.Of(id, ZIO.succeed(typedBody), etag, links)
+  ) = Resource.Of(urn, ZIO.succeed(typedBody), etag, links)
 
-  def fromTypedClass[R: Resource.Typed](
+  def fromAddressableClass[R: Resource.Addressable](
       typedBody: R,
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
@@ -185,7 +185,7 @@ object Resource:
               ZIO.fail(ResourceError.SerializationError("not able to deserialize resource body", Some(t)))
             }
 
-          Resource.Of[R](resource.id, parsedBody, resource.etag, resource.links)
+          Resource.Of[R](resource.urn, parsedBody, resource.etag, resource.links)
         case _ => error("Missing Decoder for type" + codeOf(erasedValue[R]))
 
       }
@@ -197,9 +197,9 @@ object Resource:
         collectionModel <-
           ZStream.fromZIO(
             ZIO
-              .fromOption(model.collectionForUrn(resource.id))
+              .fromOption(model.collectionForUrn(resource.urn))
               .orElseFail(
-                ResourceError.NormalizationError(s"Can't find collection for resource urn ${resource.id}")
+                ResourceError.NormalizationError(s"Can't find collection for resource urn ${resource.urn}")
               )
           )
         in <- ZStream.scoped {
@@ -215,18 +215,17 @@ object Resource:
 
   given Show[Resource] = new Show[Resource]:
     def show(r: Resource): String =
-      s"""Resource(${r.id}, ${r.format}${r.etag.map(e => ", etag: \"" + e + "\"").getOrElse("")})"""
+      s"""Resource(${r.urn}, ${r.format}${r.etag.map(e => ", etag: \"" + e + "\"").getOrElse("")})"""
 
-  trait Typed[R]:
-    self =>
+  trait Addressable[R]:
 
-    def resourceCollection: String
-    def resourceId(r: R): String
-    def resourceUrn(r: R): Urn = Urn.parse(s"urn:$resourceCollection:${resourceId(r)}")
-    def resourceWithId(r: R)(newId: String): R
+    def resourceNid: String
+    def resourceNss(r: R): String
+    def resourceUrn(r: R): Urn = Urn.parse(s"urn:$resourceNid:${resourceNss(r)}")
 
     extension (r: R)
-      def collection: String = self.resourceCollection
-      def resId: String = resourceId(r)
       def urn: Urn = resourceUrn(r)
-      def withId(id: String): R = resourceWithId(r)(id)
+      def asResource: Resource.Of[R] = Resource.fromAddressableClass(r)(using this)
+
+    given addressableToResource(using Resource.Addressable[R]): Conversion[R, Resource.Of[R]] =
+      _.asResource

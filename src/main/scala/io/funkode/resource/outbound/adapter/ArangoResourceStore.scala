@@ -48,7 +48,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
   def store(resource: Resource): ResourceApiCall[Resource] =
     resource.format match
       case ResourceFormat.Json =>
-        val urn = resource.id
+        val urn = resource.urn
 
         for
           jsonDocument <- JsonDecoder[Json].decodeJsonStreamInput(resource.body).catchAll {
