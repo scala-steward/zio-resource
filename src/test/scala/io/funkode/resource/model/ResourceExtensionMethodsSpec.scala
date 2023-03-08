@@ -48,7 +48,7 @@ trait ResourceExamples:
       |  "age": 23
       |}
       |""".stripMargin
-  val jsonResource: Resource = Resource.fromString(jsonResourceUrn, jsonResourceBody)
+  val jsonResource: Resource = Resource.fromJsonString(jsonResourceUrn, jsonResourceBody)
 
   val personResource: Resource.Of[User] =
     Resource.fromTypedClass(User("123", "Peter", 23))
@@ -83,7 +83,7 @@ trait ResourceExamples:
        |}
        |""".stripMargin
 
-  val denormalizedCatalogResource = Resource.fromString(catalogUrn, catalogJson)
+  val denormalizedCatalogResource = Resource.fromJsonString(catalogUrn, catalogJson)
 
   val normalizedCatalogJson = """{ "id": "mainCatalog" }""".stripMargin
   val normalizedBook1Json = """{ "isbn": "9780744525021", "title": "El Quijote" }""".stripMargin
@@ -101,8 +101,6 @@ trait ResourceExamples:
     ).map(_.fromJson[Json].getOrElse(Json.Null))
 
 object ResourceOfDerivationSpec extends ZIOSpecDefault with ResourceExamples:
-
-  import Resource.fromRawResourceToTypedResource
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Resource should")(

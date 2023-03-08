@@ -8,6 +8,7 @@ package io.funkode.resource.model
 
 import scala.annotation.{switch, tailrec}
 import scala.collection.mutable.Stack
+import scala.compiletime.*
 import scala.deriving.Mirror
 import scala.quoted.{Expr, Quotes, Type}
 
@@ -37,15 +38,6 @@ object Etag:
 
 private def withId(urn: Option[Urn]): String = urn.map("with id " + _).getOrElse(s"(with no id)")
 
-enum ResourceError(msg: String, cause: Option[Throwable] = None) extends Throwable(msg, cause.orNull):
-  case NotFoundError(urn: Option[Urn], cause: Option[Throwable])
-      extends ResourceError(s"Resource ${withId(urn)} not found", cause)
-  case SerializationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
-  case NormalizationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
-  case FormatError(msg: String, cause: Option[Throwable] = None)
-      extends ResourceError(s"Format not supported: $msg", cause)
-  case UnderlinedError(cause: Throwable) extends ResourceError("Non controlled error", Some(cause))
-
 case class ResourceLink(urn: Urn, rel: String, attributes: Map[String, String] = Map.empty)
 type ResourceLinks = Map[String, ResourceLink]
 
@@ -59,13 +51,33 @@ case class Resource(
 
 object Resource:
 
-  def fromString(
+  case class Of[R](
+      id: Urn,
+      body: IO[ResourceError, R],
+      etag: Option[Etag] = None,
+      links: ResourceLinks = Map.empty
+  )
+
+  def fromJsonString(
       id: Urn,
       bodyString: String,
       format: ResourceFormat = ResourceFormat.Json,
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
   ): Resource = Resource(id, ZStream.fromIterable(bodyString.getBytes), format, etag, links)
+
+  def fromCaseClass[R](
+      id: Urn,
+      typedBody: R,
+      etag: Option[Etag] = None,
+      links: ResourceLinks = Map.empty
+  ) = Resource.Of(id, ZIO.succeed(typedBody), etag, links)
+
+  def fromTypedClass[R: Resource.Typed](
+      typedBody: R,
+      etag: Option[Etag] = None,
+      links: ResourceLinks = Map.empty
+  ) = fromCaseClass(typedBody.urn, typedBody, etag, links)
 
   enum JsonParsingPhase:
     case Root
@@ -164,8 +176,19 @@ object Resource:
           }
     }
 
-  extension (resource: Resource)
-    def of[R: JsonDecoder]: Resource.Of[R] = fromRawResourceToTypedResource.apply(resource)
+  extension (inline resource: Resource)
+    inline def of[R]: Resource.Of[R] =
+      summonFrom {
+        case given JsonDecoder[R] =>
+          val parsedBody =
+            JsonDecoder[R].decodeJsonStreamInput(resource.body).catchAll { case t: Throwable =>
+              ZIO.fail(ResourceError.SerializationError("not able to deserialize resource body", Some(t)))
+            }
+
+          Resource.Of[R](resource.id, parsedBody, resource.etag, resource.links)
+        case _ => error("Missing Decoder for type" + codeOf(erasedValue[R]))
+
+      }
 
     inline def normalizeWithModel[R: Mirror.Of]: ResourceStream[Any] =
       val model = DeriveResourceModel.gen[R]
@@ -189,34 +212,6 @@ object Resource:
         }
         fullDoc <- normalizeJson(in)
       yield fullDoc
-
-  case class Of[R](
-      id: Urn,
-      body: IO[ResourceError, R],
-      etag: Option[Etag] = None,
-      links: ResourceLinks = Map.empty
-  )
-
-  def fromCaseClass[R](
-      id: Urn,
-      typedBody: R,
-      etag: Option[Etag] = None,
-      links: ResourceLinks = Map.empty
-  ) = Resource.Of(id, ZIO.succeed(typedBody), etag, links)
-
-  def fromTypedClass[R: Resource.Typed](
-      typedBody: R,
-      etag: Option[Etag] = None,
-      links: ResourceLinks = Map.empty
-  ) = fromCaseClass(typedBody.urn, typedBody, etag, links)
-
-  given fromRawResourceToTypedResource[R](using JsonDecoder[R]): Conversion[Resource, Resource.Of[R]] =
-    resource =>
-      val parsedBody = JsonDecoder[R].decodeJsonStreamInput(resource.body).catchAll { case t: Throwable =>
-        ZIO.fail(ResourceError.SerializationError("not able to deserialize resource body", Some(t)))
-      }
-
-      Resource.Of[R](resource.id, parsedBody, resource.etag, resource.links)
 
   given Show[Resource] = new Show[Resource]:
     def show(r: Resource): String =
