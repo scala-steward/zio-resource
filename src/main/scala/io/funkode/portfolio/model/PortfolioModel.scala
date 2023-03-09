@@ -11,6 +11,7 @@ import io.lemonlabs.uri.Urn
 import zio.json.*
 
 import io.funkode.resource.model.*
+import JsonUtils.given
 
 sealed trait Portfolio
 
@@ -24,7 +25,7 @@ case class Network(
     derives JsonCodec
 
 case class Transaction(
-    network: Network,
+    network: Urn,
     hash: String,
     timestamp: Long,
     next: Option[Transaction] = None
@@ -40,4 +41,4 @@ object Portfolio:
   given Resource.Addressable[Transaction] with
     def resourceNid: String = "tx"
     def resourceNss(transaction: Transaction): String =
-      s"${transaction.hash}@${transaction.network.id}"
+      s"${transaction.hash}@${transaction.network.nss}"

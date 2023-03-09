@@ -25,7 +25,7 @@ trait PortfolioSampleModel:
     List(RelModel("transactions", s"$mainPackage.Transaction", true))
   )
   val txCollectionModel =
-    CollectionModel("tx", s"$mainPackage.Transaction", List(RelModel("network", s"$mainPackage.Network")))
+    CollectionModel("tx", s"$mainPackage.Transaction", List())
 
   val expectedModel =
     ResourceModel(

@@ -41,13 +41,12 @@ private def withId(urn: Option[Urn]): String = urn.map("with id " + _).getOrElse
 case class ResourceLink(urn: Urn, rel: String, attributes: Map[String, String] = Map.empty)
 type ResourceLinks = Map[String, ResourceLink]
 
-case class Resource(
-    urn: Urn,
-    body: ByteResourceStream,
-    format: ResourceFormat = ResourceFormat.Json,
-    etag: Option[Etag] = None,
-    links: ResourceLinks = Map.empty
-)
+trait Resource:
+  def urn: Urn
+  def body: ByteResourceStream
+  def format: ResourceFormat
+  def etag: Option[Etag]
+  def links: ResourceLinks
 
 object Resource:
 
@@ -58,13 +57,24 @@ object Resource:
       links: ResourceLinks = Map.empty
   )
 
+  def fromJsonStream(
+      resourceUrn: Urn,
+      bodyStream: ByteResourceStream,
+      resourceEtag: Option[Etag] = None,
+      resourceLinks: ResourceLinks = Map.empty
+  ): Resource = new Resource:
+    def urn: Urn = resourceUrn
+    def body: ByteResourceStream = bodyStream
+    def format: ResourceFormat = ResourceFormat.Json
+    def etag: Option[Etag] = resourceEtag
+    def links: ResourceLinks = resourceLinks
+
   def fromJsonString(
       urn: Urn,
       bodyString: String,
-      format: ResourceFormat = ResourceFormat.Json,
       etag: Option[Etag] = None,
       links: ResourceLinks = Map.empty
-  ): Resource = Resource(urn, ZStream.fromIterable(bodyString.getBytes), format, etag, links)
+  ): Resource = Resource.fromJsonStream(urn, ZStream.fromIterable(bodyString.getBytes), etag, links)
 
   def fromCaseClass[R](
       urn: Urn,
@@ -93,11 +103,26 @@ object Resource:
 
       }
 
+  extension [R: Resource.Addressable](inline typedResource: Resource.Of[R])
+    inline def asJsonResource: Resource =
+      val bodyStream = for
+        bodyTypedStream <- ZStream.fromZIO(typedResource.body)
+        jsonBodyStream <- summonInline[JsonEncoder[R]]
+          .encodeJsonStream(bodyTypedStream)
+          .map(_.toByte)
+          .mapError(e => ResourceError.SerializationError.apply("error serializing json", Option(e)))
+      yield jsonBodyStream
+      Resource.fromJsonStream(typedResource.urn, bodyStream)
+
   given Show[Resource] = new Show[Resource]:
     def show(r: Resource): String =
       s"""Resource(${r.urn}, ${r.format}${r.etag.map(e => ", etag: \"" + e + "\"").getOrElse("")})"""
 
   trait Addressable[R]:
+
+    self =>
+
+    import Resource.asJsonResource
 
     def resourceNid: String
     def resourceNss(r: R): String
@@ -105,7 +130,8 @@ object Resource:
 
     extension (r: R)
       def urn: Urn = resourceUrn(r)
-      def asResource: Resource.Of[R] = Resource.fromAddressableClass(r)(using this)
+      def asResource: Resource.Of[R] = Resource.fromAddressableClass(r)(using self)
+      inline def asJsonResource: Resource = r.asResource.asJsonResource(using self)
 
     given addressableToResource(using Resource.Addressable[R]): Conversion[R, Resource.Of[R]] =
       _.asResource

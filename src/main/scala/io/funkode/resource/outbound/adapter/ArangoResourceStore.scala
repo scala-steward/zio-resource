@@ -8,6 +8,7 @@ package io.funkode.resource
 package outbound
 package adapter
 
+import scala.compiletime.*
 import scala.deriving.Mirror
 
 import io.lemonlabs.uri.Urn
@@ -33,8 +34,8 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   private def relCollection(urn: Urn): CollectionName = CollectionName(urn.nid + "-rels")
 
-  private def linkKey(rel: String, rightUrn: Urn) =
-    DocumentKey(s"""${rel}:${rightUrn.nid}:${rightUrn.nss}""")
+  private def linkKey(leftUrn: Urn, rel: String, rightUrn: Urn) =
+    DocumentKey(s"""${leftUrn.nss}-(${rel})-${rightUrn.nss}""")
 
   def resourceModel: ResourceModel = storeModel
 
@@ -43,9 +44,9 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
       .document(urn)
       .readRaw()
       .handleErrors(Some(urn))
-      .map(stream => Resource.apply(urn, stream.handleStreamErrors(Some(urn))))
+      .map(stream => Resource.fromJsonStream(urn, stream.handleStreamErrors(Some(urn))))
 
-  def store(resource: Resource): ResourceApiCall[Resource] =
+  def save(resource: Resource): ResourceApiCall[Resource] =
     resource.format match
       case ResourceFormat.Json =>
         val urn = resource.urn
@@ -75,7 +76,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
     db.collection(relCollection(leftUrn))
       .documents
-      .create(List(Rel(rel, leftUrn, rightUrn, linkKey(rel, rightUrn))))
+      .create(List(Rel(rel, leftUrn, rightUrn, linkKey(leftUrn, rel, rightUrn))))
       .handleErrors()
       .map(_ => ())
 
@@ -144,7 +145,7 @@ object ArangoResourceStore:
       val body: ByteResourceStream = ZStream.fromIterable(json.pure.toJson.toCharArray.map(_.toByte))
       val etag: Option[Etag] = json.etag
 
-      Resource(urn, body, ResourceFormat.Json, etag)
+      Resource.fromJsonStream(urn, body, etag)
 
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))

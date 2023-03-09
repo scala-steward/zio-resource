@@ -27,6 +27,11 @@ import zio.stream.*
 
 object JsonUtils:
 
+  given urnCodec: JsonCodec[Urn] = JsonCodec(
+    JsonEncoder[String].contramap(_.toString),
+    JsonDecoder[String].map(Urn.parse)
+  )
+
   enum JsonParsingPhase:
     case Root
     case Array

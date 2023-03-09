@@ -42,7 +42,8 @@ trait TransactionsExamples:
       |}
       |""".stripMargin
 
-  val ethNetworkResource = Resource.apply(ethNetworkUrn, ZStream.fromIterable(ethNetwornJsonString.getBytes))
+  val ethNetworkResource =
+    Resource.fromJsonStream(ethNetworkUrn, ZStream.fromIterable(ethNetwornJsonString.getBytes))
 
   val tx1JsonString =
     s"""
@@ -62,34 +63,35 @@ trait TransactionsExamples:
        |}
        |""".stripMargin
 
-  val tx1 = Transaction(ethNetwork, hash1, timestamp1)
-  val tx2 = Transaction(ethNetwork, hash2, timestamp2)
-  val tx1Resource = Resource.apply(tx1Urn, ZStream.fromIterable(tx1JsonString.getBytes()))
-  val tx2Resource = Resource.apply(tx2Urn, ZStream.fromIterable(tx2JsonString.getBytes()))
+  val tx1 = Transaction(ethNetwork.urn, hash1, timestamp1)
+  val tx2 = Transaction(ethNetwork.urn, hash2, timestamp2)
+  val tx1Resource = Resource.fromJsonStream(tx1Urn, ZStream.fromIterable(tx1JsonString.getBytes()))
+  val tx2Resource = Resource.fromJsonStream(tx2Urn, ZStream.fromIterable(tx2JsonString.getBytes()))
 
 object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(test("Store network, transaction and link them") {
       for
-        storedNetworkResource <- ResourceStore.store(ethNetworkResource)
-        storedNetwork <- storedNetworkResource.of[Network].body
-        fetchedNetworkResource <- ResourceStore.fetch(ethNetworkUrn)
-        fetchedNetwork <- fetchedNetworkResource.of[Network].body
-        storedTxResource <- ResourceStore.store(tx1Resource)
-        storedTx <- storedTxResource.of[Transaction].body
-        fetchedTxResource <- ResourceStore.fetch(tx1Urn)
-        fetchedTx <- fetchedTxResource.of[Transaction].body
+        storedNetworkResource <- ResourceStore.save(ethNetwork)
+        storedNetwork <- storedNetworkResource.body
+        fetchedNetworkResource <- ResourceStore.fetchAs[Network](ethNetworkUrn)
+        fetchedNetwork <- fetchedNetworkResource.body
+        storedTxResource <- ResourceStore.save(tx1)
+        storedTx <- storedTxResource.body
+        fetchedTxResource <- ResourceStore.fetchAs[Transaction](tx1Urn)
+        fetchedTx <- fetchedTxResource.body
         // link test
-        _ <- ResourceStore.store(tx2Resource)
-        _ <- ResourceStore.link(ethNetworkUrn, "transactions", tx1Urn)
-        _ <- ResourceStore.link(ethNetworkUrn, "transactions", tx2Urn)
-        _ <- ResourceStore.link(tx1Urn, "network", ethNetworkUrn)
+        _ <- ResourceStore.save(tx2)
+        _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx1.urn)
+        _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx2.urn)
+        _ <- ResourceStore.link(tx1.urn, "network", ethNetwork.urn)
+        _ <- ResourceStore.link(tx2.urn, "network", ethNetwork.urn)
         networkTransactions <- ResourceStore
-          .fetchRel(ethNetworkUrn, "transactions")
+          .fetchRel(ethNetwork.urn, "transactions")
           .mapZIO(_.of[Transaction].body)
           .run(ZSink.collectAll)
-        transactionNetworkResource <- ResourceStore.fetchRel(tx1Urn, "network").run(ZSink.head)
+        transactionNetworkResource <- ResourceStore.fetchRel(tx1.urn, "network").run(ZSink.head)
         transactionNetwork <- transactionNetworkResource
           .map(_.of[Network].body)
           .getOrElse(throw new Exception())
