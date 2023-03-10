@@ -39,12 +39,12 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   def resourceModel: ResourceModel = storeModel
 
-  def fetch(urn: Urn): ResourceApiCall[Resource] =
-    db
+  def fetch(urn: Urn): ResourceStream[Resource] =
+    val bodyStream = db
       .document(urn)
       .readRaw()
-      .handleErrors(Some(urn))
-      .map(stream => Resource.fromJsonStream(urn, stream.handleStreamErrors(Some(urn))))
+      .handleStreamErrors(Some(urn))
+    ZStream.apply(Resource.fromJsonStream(urn, bodyStream))
 
   def save(resource: Resource): ResourceApiCall[Resource] =
     resource.format match
@@ -113,11 +113,17 @@ object ArangoResourceStore:
 
   extension [R](io: IO[Throwable, R])
     def handleErrors(urn: Option[Urn] = None): ResourceApiCall[R] =
-      io.catchAll(t => ZIO.fail(handleArrangoErrors(urn, t)))
+      io.catchAll(t =>
+        println(s"handleErrors for urn $urn, error: ${t.toString}")
+        ZIO.fail(handleArrangoErrors(urn, t))
+      )
 
   extension [R](stream: Stream[Throwable, R])
     def handleStreamErrors(urn: Option[Urn] = None): ResourceStream[R] =
-      stream.catchAll(t => ZStream.fail(handleArrangoErrors(urn, t)))
+      stream.catchAll(t =>
+        println(s"handleStreamErrors for urn $urn, error: ${t.toString}")
+        ZStream.fail(handleArrangoErrors(urn, t))
+      )
 
   extension (json: Json)
     def etag: Option[Etag] = json match

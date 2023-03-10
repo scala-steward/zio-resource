@@ -71,40 +71,56 @@ trait TransactionsExamples:
 object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
-    suite("Arango ResourceStore should")(test("Store network, transaction and link them") {
-      for
-        storedNetworkResource <- ResourceStore.save(ethNetwork)
-        storedNetwork <- storedNetworkResource.body
-        fetchedNetworkResource <- ResourceStore.fetchAs[Network](ethNetworkUrn)
-        fetchedNetwork <- fetchedNetworkResource.body
-        storedTxResource <- ResourceStore.save(tx1)
-        storedTx <- storedTxResource.body
-        fetchedTxResource <- ResourceStore.fetchAs[Transaction](tx1Urn)
-        fetchedTx <- fetchedTxResource.body
-        // link test
-        _ <- ResourceStore.save(tx2)
-        _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx1.urn)
-        _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx2.urn)
-        _ <- ResourceStore.link(tx1.urn, "network", ethNetwork.urn)
-        _ <- ResourceStore.link(tx2.urn, "network", ethNetwork.urn)
-        networkTransactions <- ResourceStore
-          .fetchRel(ethNetwork.urn, "transactions")
-          .mapZIO(_.of[Transaction].body)
-          .run(ZSink.collectAll)
-        transactionNetworkResource <- ResourceStore.fetchRel(tx1.urn, "network").run(ZSink.head)
-        transactionNetwork <- transactionNetworkResource
-          .map(_.of[Network].body)
-          .getOrElse(throw new Exception())
-        _ <- ZIO.unit
-      yield assertTrue(storedNetwork == ethNetwork) &&
-        assertTrue(storedNetwork == fetchedNetwork) &&
-        assertTrue(storedTx == tx1) &&
-        assertTrue(storedTx == fetchedTx) &&
-        assertTrue(transactionNetworkResource.map(_.urn) == Some(ethNetworkUrn)) &&
-        assertTrue(transactionNetwork == ethNetwork) &&
-        assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2))
+    suite("Arango ResourceStore should")(
+      test("Store network, transaction and link them") {
 
-    }).provideShared(
+        for
+          storedNetworkResource <- ResourceStore.save(ethNetwork)
+          storedNetwork <- storedNetworkResource.body
+          fetchedNetworkResource <- ResourceStore.fetchAs[Network](ethNetworkUrn).runHead
+          fetchedNetwork <- fetchedNetworkResource.get.body
+          storedTxResource <- ResourceStore.save(tx1)
+          storedTx <- storedTxResource.body
+          fetchedTxResource <- ResourceStore.fetchAs[Transaction](tx1Urn).runHead
+          fetchedTx <- fetchedTxResource.get.body
+          // link test
+          _ <- ResourceStore.save(tx2)
+          _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx1.urn)
+          _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx2.urn)
+          _ <- ResourceStore.link(tx1.urn, "network", ethNetwork.urn)
+          _ <- ResourceStore.link(tx2.urn, "network", ethNetwork.urn)
+          networkTransactions <- ResourceStore
+            .fetchRel(ethNetwork.urn, "transactions")
+            .mapZIO(_.of[Transaction].body)
+            .run(ZSink.collectAll)
+          transactionNetworkResource <- ResourceStore.fetchRel(tx1.urn, "network").run(ZSink.head)
+          transactionNetwork <- transactionNetworkResource
+            .map(_.of[Network].body)
+            .getOrElse(throw new Exception())
+          _ <- ZIO.unit
+        yield assertTrue(storedNetwork == ethNetwork) &&
+          assertTrue(storedNetwork == fetchedNetwork) &&
+          assertTrue(storedTx == tx1) &&
+          assertTrue(storedTx == fetchedTx) &&
+          assertTrue(transactionNetworkResource.map(_.urn) == Some(ethNetworkUrn)) &&
+          assertTrue(transactionNetwork == ethNetwork) &&
+          assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2))
+
+      },
+      test("Manage not found errors") {
+        val fakeUrn = Urn.parse("urn:network:doesnt:exist")
+        for error <- ResourceStore
+            .fetch(fakeUrn)
+            .flatMap(_.body)
+            .via(ZPipeline.utf8Decode)
+            .runCollect
+            .flip
+        yield assertTrue(error match
+          case ResourceError.NotFoundError(urn, _) => urn == Some(fakeUrn)
+          case other                               => false
+        )
+      }
+    ).provideShared(
       Scope.default,
       ArangoConfiguration.default,
       Client.default,

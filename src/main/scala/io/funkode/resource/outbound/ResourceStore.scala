@@ -28,12 +28,12 @@ trait ResourceStore:
 
   def resourceModel: ResourceModel
 
-  def fetch(urn: Urn): ResourceApiCall[Resource]
+  def fetch(urn: Urn): ResourceStream[Resource]
   def save(resource: Resource): ResourceApiCall[Resource]
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
-  inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceApiCall[Resource.Of[R]] =
+  inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceStream[Resource.Of[R]] =
     fetch(urn).map(_.of[R])
 
   inline def save[R: Resource.Addressable](
@@ -52,10 +52,12 @@ object ResourceStore:
   type WithResourceStreamStore[R] = ZStream[ResourceStore, ResourceError, R]
 
   inline def withStore[R](f: ResourceStore => WithResourceStore[R]) = ZIO.service[ResourceStore].flatMap(f)
+  inline def withStreamStore[R](f: ResourceStore => WithResourceStreamStore[R]) =
+    ZStream.service[ResourceStore].flatMap(f)
 
-  def fetch(urn: Urn): WithResourceStore[Resource] = withStore(_.fetch(urn))
+  def fetch(urn: Urn): WithResourceStreamStore[Resource] = withStreamStore(_.fetch(urn))
 
-  inline def fetchAs[R: Addressable](urn: Urn): WithResourceStore[Resource.Of[R]] = withStore(
+  inline def fetchAs[R: Addressable](urn: Urn): WithResourceStreamStore[Resource.Of[R]] = withStreamStore(
     _.fetchAs[R](urn)
   )
 
@@ -76,7 +78,7 @@ object ResourceStore:
     withStore(_.link(leftUrn, relType, rightUrn))
 
   def fetchRel(urn: Urn, relType: String): WithResourceStreamStore[Resource] =
-    ZStream.service[ResourceStore].flatMap(_.fetchRel(urn, relType))
+    withStreamStore(_.fetchRel(urn, relType))
 
 /*
 trait JsonStore extends ResourceStore[JsonEncoder, JsonDecoder, Json]:
