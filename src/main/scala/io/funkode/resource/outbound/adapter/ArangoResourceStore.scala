@@ -20,6 +20,7 @@ import zio.stream.*
 import io.funkode.arangodb.http.*
 import io.funkode.arangodb.http.JsonCodecs.given
 import io.funkode.arangodb.model.*
+import io.funkode.arangodb.protocol.ArangoMessage.*
 import io.funkode.resource.model.*
 import io.funkode.velocypack.VPack.*
 
@@ -40,11 +41,18 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
   def resourceModel: ResourceModel = storeModel
 
   def fetch(urn: Urn): ResourceStream[Resource] =
-    val bodyStream = db
-      .document(urn)
-      .readRaw()
-      .handleStreamErrors(Some(urn))
-    ZStream.apply(Resource.fromJsonStream(urn, bodyStream))
+    for
+      headers <- ZStream.fromZIO(db.document(urn).head().handleErrors(Some(urn)))
+      bodyStream = db
+        .document(urn)
+        .readRaw()
+        .handleStreamErrors(Some(urn))
+      resourceEtag = headers match
+        case Header.Response(_, _, _, meta) =>
+          meta.get("Etag").map(Etag.apply)
+        case _ => None
+      resource <- ZStream.apply(Resource.fromJsonStream(urn, bodyStream, resourceEtag))
+    yield resource
 
   def save(resource: Resource): ResourceApiCall[Resource] =
     resource.format match
@@ -114,14 +122,14 @@ object ArangoResourceStore:
   extension [R](io: IO[Throwable, R])
     def handleErrors(urn: Option[Urn] = None): ResourceApiCall[R] =
       io.catchAll(t =>
-        println(s"handleErrors for urn $urn, error: ${t.toString}")
+        ZIO.logErrorCause(s"handleErrors for urn $urn", Cause.fail(t))
         ZIO.fail(handleArrangoErrors(urn, t))
       )
 
   extension [R](stream: Stream[Throwable, R])
     def handleStreamErrors(urn: Option[Urn] = None): ResourceStream[R] =
       stream.catchAll(t =>
-        println(s"handleStreamErrors for urn $urn, error: ${t.toString}")
+        ZIO.logErrorCause(s"handleStreamErrors for urn $urn", Cause.fail(t))
         ZStream.fail(handleArrangoErrors(urn, t))
       )
 

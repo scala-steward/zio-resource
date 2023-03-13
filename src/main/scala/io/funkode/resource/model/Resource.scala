@@ -48,6 +48,9 @@ trait Resource:
   def etag: Option[Etag]
   def links: ResourceLinks
 
+  override def toString: _root_.java.lang.String =
+    s"Resource(urn: $urn, format: $format, etag: $etag)"
+
 object Resource:
 
   case class Of[R](
@@ -94,8 +97,10 @@ object Resource:
       summonFrom {
         case given JsonDecoder[R] =>
           val parsedBody =
-            JsonDecoder[R].decodeJsonStreamInput(resource.body).catchAll { case t: Throwable =>
-              ZIO.fail(ResourceError.SerializationError("not able to deserialize resource body", Some(t)))
+            JsonDecoder[R].decodeJsonStreamInput(resource.body).mapError {
+              case e: ResourceError => e
+              case t: Throwable =>
+                ResourceError.SerializationError("Not able to deserialize resource body", Some(t))
             }
 
           Resource.Of[R](resource.urn, parsedBody, resource.etag, resource.links)
