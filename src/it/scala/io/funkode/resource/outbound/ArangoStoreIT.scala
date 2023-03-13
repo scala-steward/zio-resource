@@ -124,7 +124,7 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
             .runHead
             .flip
         yield assertTrue(error match
-          case ResourceError.NotFoundError(urn, _) => urn == Some(fakeUrn)
+          case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
           case _                                   => false
         )
       },
@@ -135,7 +135,7 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
             .runCollect
             .flip
         yield assertTrue(error match
-          case ResourceError.NotFoundError(urn, _) => urn == Some(fakeUrn)
+          case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
           case other =>
             println("other type of error " + other)
             false

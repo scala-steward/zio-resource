@@ -35,18 +35,18 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   private def relCollection(urn: Urn): CollectionName = CollectionName(urn.nid + "-rels")
 
-  private def linkKey(leftUrn: Urn, rel: String, rightUrn: Urn) =
+  private def generateLinkKey(leftUrn: Urn, rel: String, rightUrn: Urn) =
     DocumentKey(s"""${leftUrn.nss}-(${rel})-${rightUrn.nss}""")
 
   def resourceModel: ResourceModel = storeModel
 
   def fetch(urn: Urn): ResourceStream[Resource] =
     for
-      headers <- ZStream.fromZIO(db.document(urn).head().handleErrors(Some(urn)))
+      headers <- ZStream.fromZIO(db.document(urn).head().handleErrors(urn))
       bodyStream = db
         .document(urn)
         .readRaw()
-        .handleStreamErrors(Some(urn))
+        .handleStreamErrors(urn)
       resourceEtag = headers match
         case Header.Response(_, _, _, meta) =>
           meta.get("Etag").map(Etag.apply)
@@ -72,7 +72,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
           savedResource <- db
             .document(urn)
             .upsert(vobject)
-            .handleErrors(Some(urn))
+            .handleErrors(urn)
             .flatMap(vpack =>
               ZIO
                 .fromEither[String, Json](vobjectEncoder.toJsonAST(vpack))
@@ -82,10 +82,11 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
         yield savedResource
 
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
     db.collection(relCollection(leftUrn))
       .documents
-      .create(List(Rel(rel, leftUrn, rightUrn, linkKey(leftUrn, rel, rightUrn))))
-      .handleErrors()
+      .create(List(Rel(rel, leftUrn, rightUrn, linkKey)))
+      .handleErrors(Urn.apply("rels", linkKey.unwrap))
       .map(_ => ())
 
   def fetchRel(urn: Urn, relType: String): Stream[ResourceError, Resource] =
@@ -98,7 +99,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
       )
       .stream[Json]
       .map(json => json.asResource)
-      .handleStreamErrors()
+      .handleStreamErrors(urn)
 
 object ArangoResourceStore:
 
@@ -115,19 +116,19 @@ object ArangoResourceStore:
   given fromDocHandleToUrn: Conversion[DocumentHandle, Urn] = docHandle =>
     Urn.parse(s"urn:${docHandle.collection.unwrap}:${docHandle.key.unwrap}")
 
-  def handleArrangoErrors(urn: Option[Urn], t: Throwable): ResourceError = t match
+  def handleArrangoErrors(urn: Urn, t: Throwable): ResourceError = t match
     case e @ ArangoError(404, _, message, _) => ResourceError.NotFoundError(urn, Some(e))
     case e                                   => ResourceError.UnderlinedError(e)
 
   extension [R](io: IO[Throwable, R])
-    def handleErrors(urn: Option[Urn] = None): ResourceApiCall[R] =
+    def handleErrors(urn: Urn): ResourceApiCall[R] =
       io.catchAll(t =>
         ZIO.logErrorCause(s"handleErrors for urn $urn", Cause.fail(t))
         ZIO.fail(handleArrangoErrors(urn, t))
       )
 
   extension [R](stream: Stream[Throwable, R])
-    def handleStreamErrors(urn: Option[Urn] = None): ResourceStream[R] =
+    def handleStreamErrors(urn: Urn): ResourceStream[R] =
       stream.catchAll(t =>
         ZIO.logErrorCause(s"handleStreamErrors for urn $urn", Cause.fail(t))
         ZStream.fail(handleArrangoErrors(urn, t))
@@ -177,7 +178,7 @@ object ArangoResourceStore:
             .map(col => db.collection(col).createEdgeIfNotExist())
 
           createCollections ++ createRels
-        }).handleErrors() *>
+        }).handleErrors(Urn.apply("init", "db")) *>
       ZIO.succeed(db)
 
   inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =

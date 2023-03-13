@@ -9,8 +9,8 @@ package io.funkode.resource.model
 import io.lemonlabs.uri.Urn
 
 enum ResourceError(msg: String, cause: Option[Throwable] = None) extends Throwable(msg, cause.orNull):
-  case NotFoundError(urn: Option[Urn], cause: Option[Throwable])
-      extends ResourceError(s"Resource ${withId(urn)} not found", cause)
+  case NotFoundError(urn: Urn, cause: Option[Throwable])
+      extends ResourceError(s"Resource with urn $urn not found", cause)
   case SerializationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
   case NormalizationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
   case FormatError(msg: String, cause: Option[Throwable] = None)
