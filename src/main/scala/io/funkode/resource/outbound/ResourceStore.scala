@@ -33,8 +33,17 @@ trait ResourceStore:
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
+  def fetchOne(urn: Urn): ResourceApiCall[Resource] =
+    for
+      fetchOption <- fetch(urn).runHead
+      result <- ZIO.fromOption(fetchOption).mapError(_ => ResourceError.NotFoundError(urn, None))
+    yield result
+
   inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceStream[Resource.Of[R]] =
     fetch(urn).map(_.of[R])
+
+  inline def fetchOneAs[R: Resource.Addressable](urn: Urn): ResourceApiCall[Resource.Of[R]] =
+    fetchOne(urn).map(_.of[R])
 
   inline def save[R: Resource.Addressable](
       inline addressable: R
@@ -57,8 +66,13 @@ object ResourceStore:
 
   def fetch(urn: Urn): WithResourceStreamStore[Resource] = withStreamStore(_.fetch(urn))
 
+  def fetchOne(urn: Urn): WithResourceStore[Resource] = withStore(_.fetchOne(urn))
+
   inline def fetchAs[R: Addressable](urn: Urn): WithResourceStreamStore[Resource.Of[R]] = withStreamStore(
     _.fetchAs[R](urn)
+  )
+  inline def fetchOneAs[R: Addressable](urn: Urn): WithResourceStore[Resource.Of[R]] = withStore(
+    _.fetchOneAs[R](urn)
   )
 
   def save(resource: Resource): WithResourceStore[Resource] =

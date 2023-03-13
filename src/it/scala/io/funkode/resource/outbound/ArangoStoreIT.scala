@@ -84,14 +84,12 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
-          fetchedNetworkResource <- ResourceStore
-            .fetchAs[Network](ethNetworkUrn)
-            .runHead
-          fetchedNetwork <- fetchedNetworkResource.get.body
+          fetchedNetworkResource <- ResourceStore.fetchOneAs[Network](ethNetworkUrn)
+          fetchedNetwork <- fetchedNetworkResource.body
           storedTxResource <- ResourceStore.save(tx1)
           storedTx <- storedTxResource.body
-          fetchedTxResource <- ResourceStore.fetchAs[Transaction](tx1Urn).runHead
-          fetchedTx <- fetchedTxResource.get.body
+          fetchedTxResource <- ResourceStore.fetchOneAs[Transaction](tx1Urn)
+          fetchedTx <- fetchedTxResource.body
           // link test
           _ <- ResourceStore.save(tx2)
           _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx1.urn)
@@ -109,7 +107,7 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
           _ <- ZIO.unit
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
-          assertTrue(fetchedNetworkResource.get.etag.nonEmpty) &&
+          assertTrue(fetchedNetworkResource.etag.nonEmpty) &&
           assertTrue(storedTx == tx1) &&
           assertTrue(storedTx == fetchedTx) &&
           assertTrue(transactionNetworkResource.map(_.urn) == Some(ethNetworkUrn)) &&
@@ -136,9 +134,27 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
             .flip
         yield assertTrue(error match
           case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
-          case other =>
-            println("other type of error " + other)
-            false
+          case _                                   => false
+        )
+      },
+      test("Manage not found error in (fetchOne) raw resource") {
+        val fakeUrn = Urn.parse("urn:network:doesnt:exist")
+        for error <- ResourceStore
+            .fetchOne(fakeUrn)
+            .flip
+        yield assertTrue(error match
+          case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
+          case _                                   => false
+        )
+      },
+      test("Manage not found error in (fetchOne) typed resource") {
+        val fakeUrn = Urn.parse("urn:network:doesnt:exist")
+        for error <- ResourceStore
+            .fetchOneAs[Network](fakeUrn)
+            .flip
+        yield assertTrue(error match
+          case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
+          case _                                   => false
         )
       },
       test("Manage serialization errors in typed resource") {
