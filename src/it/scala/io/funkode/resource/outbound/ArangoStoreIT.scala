@@ -20,6 +20,12 @@ import zio.stream.*
 
 trait TransactionsExamples:
 
+  case class BadModel(asdfasdfadsfsa: String) derives JsonCodec
+
+  given Addressable[BadModel] with
+    def resourceNid: String = "badModel"
+    def resourceNss(r: BadModel): String = r.asdfasdfadsfsa
+
   import Portfolio.given
 
   val hash1 = "0x888333"
@@ -32,6 +38,7 @@ trait TransactionsExamples:
   val tx2Urn = Urn.parse("urn:tx:" + hash2 + "@" + ethNetworkUrn.nss)
 
   val ethNetwork = Network("eth", "1", "Ethereum Mainnet", "ETH")
+  val bscNetwork = Network("bsc", "1", "B Chain Mainnet", "BNB")
   val ethNetwornJsonString =
     """
       |{
@@ -77,7 +84,9 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
-          fetchedNetworkResource <- ResourceStore.fetchAs[Network](ethNetworkUrn).runHead
+          fetchedNetworkResource <- ResourceStore
+            .fetchAs[Network](ethNetworkUrn)
+            .runHead
           fetchedNetwork <- fetchedNetworkResource.get.body
           storedTxResource <- ResourceStore.save(tx1)
           storedTx <- storedTxResource.body
@@ -100,6 +109,7 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
           _ <- ZIO.unit
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
+          assertTrue(fetchedNetworkResource.get.etag.nonEmpty) &&
           assertTrue(storedTx == tx1) &&
           assertTrue(storedTx == fetchedTx) &&
           assertTrue(transactionNetworkResource.map(_.urn) == Some(ethNetworkUrn)) &&
@@ -107,17 +117,41 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
           assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2))
 
       },
-      test("Manage not found errors") {
+      test("Manage not found error in raw resource") {
         val fakeUrn = Urn.parse("urn:network:doesnt:exist")
         for error <- ResourceStore
             .fetch(fakeUrn)
-            .flatMap(_.body)
-            .via(ZPipeline.utf8Decode)
+            .runHead
+            .flip
+        yield assertTrue(error match
+          case ResourceError.NotFoundError(urn, _) => urn == Some(fakeUrn)
+          case _                                   => false
+        )
+      },
+      test("Manage not found error in typed resource") {
+        val fakeUrn = Urn.parse("urn:network:doesnt:exist")
+        for error <- ResourceStore
+            .fetchAs[Network](fakeUrn)
             .runCollect
             .flip
         yield assertTrue(error match
           case ResourceError.NotFoundError(urn, _) => urn == Some(fakeUrn)
-          case other                               => false
+          case other =>
+            println("other type of error " + other)
+            false
+        )
+      },
+      test("Manage serialization errors in typed resource") {
+        for
+          _ <- ResourceStore.save[Network](bscNetwork)
+          error <- ResourceStore
+            .fetchAs[BadModel](bscNetwork.urn)
+            .mapZIO(_.body)
+            .runCollect
+            .flip
+        yield assertTrue(error match
+          case _: ResourceError.SerializationError => true
+          case _                                   => false
         )
       }
     ).provideShared(
