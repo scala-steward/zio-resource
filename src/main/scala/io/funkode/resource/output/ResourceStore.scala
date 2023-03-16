@@ -36,7 +36,7 @@ trait ResourceStore:
   def fetchOne(urn: Urn): ResourceApiCall[Resource] =
     for
       fetchOption <- fetch(urn).runHead
-      result <- ZIO.fromOption(fetchOption).mapError(_ => ResourceError.NotFoundError(urn, None))
+      result <- ZIO.fromOption(fetchOption).orElseFail(ResourceError.NotFoundError(urn, None))
     yield result
 
   inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceStream[Resource.Of[R]] =
@@ -94,23 +94,42 @@ object ResourceStore:
   def fetchRel(urn: Urn, relType: String): WithResourceStreamStore[Resource] =
     withStreamStore(_.fetchRel(urn, relType))
 
-/*
-trait JsonStore extends ResourceStore[JsonEncoder, JsonDecoder, Json]:
-  override type DocResource = JsonResource
+  trait InMemoryStore extends ResourceStore:
 
-object JsonStore:
+    private val storeMap: collection.mutable.Map[Urn, Resource] = collection.mutable.Map.empty
+    private val linksMap: collection.mutable.Map[Urn, collection.mutable.Map[String, Resource]] =
+      collection.mutable.Map.empty
 
-  type WithJsonStore[R] = ZIO[JsonStore, ResourceError, R]
+    def resourceModel: ResourceModel = ResourceModel("in-mem", Map.empty)
 
-  def withStore[R](f: JsonStore => WithJsonStore[R]) = ZIO.service[JsonStore].flatMap(f)
+    def fetch(urn: Urn): ResourceStream[Resource] =
+      ZStream.fromZIO(ZIO.fromOption(storeMap.get(urn)).orElseFail(ResourceError.NotFoundError(urn)))
 
-  def fetch(urn: Urn): WithJsonStore[JsonResource] = withStore(_.fetch(urn))
+    def save(resource: Resource): ResourceApiCall[Resource] =
+      ZIO.fromOption(storeMap.put(resource.urn, resource)).orElse(ZIO.succeed(resource))
 
-  def store[R: JsonEncoder](urn: Urn, r: R): WithJsonStore[JsonResource] =
-    withStore(_.store(urn, r))
+    def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
+      for
+        _ <- ZIO.fromOption(storeMap.get(leftUrn)).orElseFail(ResourceError.NotFoundError(leftUrn))
+        rightResource <-
+          ZIO
+            .fromOption(storeMap.get(rightUrn))
+            .orElseFail(ResourceError.NotFoundError(rightUrn))
+        _ <-
+          ZIO.succeed(
+            linksMap
+              .getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
+              .put(relType, rightResource)
+              .getOrElse(rightResource)
+          )
+      yield ()
 
-  def store[R: JsonEncoder: Identifiable](r: R): WithJsonStore[JsonResource] = store(r.urn, r)
-
-  extension (resourceIO: WithJsonStore[JsonResource])
-    def deserialize[R: JsonDecoder] = resourceIO.flatMap(_.deserialize[R])
- */
+    def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =
+      ZStream.fromZIO(
+        ZIO
+          .fromOption(linksMap.get(urn).map(_.get(relType)).flatten)
+          .orElseFail(
+            ResourceError
+              .NotFoundError(urn, Some(new Throwable(s"Rel type $relType not found for urn: $urn")))
+          )
+      )

@@ -60,14 +60,21 @@ object Resource:
       links: ResourceLinks = Map.empty
   )
 
+  def empty(urn: Urn, resourceEtag: Option[Etag] = None, resourceLinks: ResourceLinks = Map.empty): Resource =
+    fromJsonStream(urn, ZStream.empty, resourceEtag, resourceLinks)
+
   def fromJsonStream(
       resourceUrn: Urn,
-      bodyStream: ByteResourceStream,
+      bodyStream: Stream[Throwable, Byte],
       resourceEtag: Option[Etag] = None,
       resourceLinks: ResourceLinks = Map.empty
   ): Resource = new Resource:
     def urn: Urn = resourceUrn
-    def body: ByteResourceStream = bodyStream
+    def body: ByteResourceStream =
+      bodyStream.mapError {
+        case e: ResourceError => e
+        case t: Throwable     => ResourceError.SerializationError("Error reading resource body", Some(t))
+      }
     def format: ResourceFormat = ResourceFormat.Json
     def etag: Option[Etag] = resourceEtag
     def links: ResourceLinks = resourceLinks
