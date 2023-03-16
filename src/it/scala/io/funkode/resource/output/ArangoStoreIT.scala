@@ -1,5 +1,5 @@
 package io.funkode.resource
-package outbound
+package output
 
 import io.funkode.arangodb.*
 import io.funkode.arangodb.http.*

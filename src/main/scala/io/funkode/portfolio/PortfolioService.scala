@@ -10,7 +10,7 @@ import zio.*
 
 import io.funkode.portfolio.model.*
 import io.funkode.resource.model.*
-import io.funkode.resource.outbound.ResourceStore
+import io.funkode.resource.output.ResourceStore
 
 type PortfolioCall[R] = IO[PortfolioError, R]
 

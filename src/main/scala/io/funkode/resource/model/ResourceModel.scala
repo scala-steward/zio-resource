@@ -13,7 +13,7 @@ import zio.schema.*
 import zio.schema.Schema.Record
 import zio.schema.meta.MetaSchema
 
-import outbound.*
+import output.*
 
 case class ResourceModel(name: String, collections: Map[String, CollectionModel] = Map.empty)
 case class CollectionModel(collectionName: String, resourceType: String, rels: List[RelModel] = List.empty)

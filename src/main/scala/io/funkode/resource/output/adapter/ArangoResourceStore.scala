@@ -5,7 +5,7 @@
  */
 
 package io.funkode.resource
-package outbound
+package output
 package adapter
 
 import scala.compiletime.*
