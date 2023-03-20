@@ -81,6 +81,12 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
             .map(_.asResource)
         yield savedResource
 
+  def delete(urn: Urn): ResourceApiCall[Unit] =
+    for
+      _ <- fetchOne(urn)
+      _ <- db.document(urn).remove[Json]().handleErrors(urn)
+    yield ()
+
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
     val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
     db.collection(relCollection(leftUrn))

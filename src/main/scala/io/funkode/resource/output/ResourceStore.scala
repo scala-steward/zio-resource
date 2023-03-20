@@ -30,6 +30,7 @@ trait ResourceStore:
 
   def fetch(urn: Urn): ResourceStream[Resource]
   def save(resource: Resource): ResourceApiCall[Resource]
+  def delete(urn: Urn): ResourceApiCall[Unit]
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
@@ -88,6 +89,8 @@ object ResourceStore:
   ): WithResourceStore[Resource] =
     withStore(_.save(typedResource))
 
+  def delete(urn: Urn): WithResourceStore[Unit] = withStore(_.delete(urn))
+
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): WithResourceStore[Unit] =
     withStore(_.link(leftUrn, relType, rightUrn))
 
@@ -107,6 +110,11 @@ object ResourceStore:
 
     def save(resource: Resource): ResourceApiCall[Resource] =
       ZIO.fromOption(storeMap.put(resource.urn, resource)).orElse(ZIO.succeed(resource))
+
+    def delete(urn: Urn): ResourceApiCall[Unit] =
+      ZIO.succeed(linksMap.remove(urn)) *>
+        ZIO.fromOption(storeMap.remove(urn)).orElseFail(ResourceError.NotFoundError(urn)) *>
+        ZIO.succeed(())
 
     def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
       for
