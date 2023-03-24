@@ -11,7 +11,7 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.4.6")
 addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.14.3")
 addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.9.34")
 addSbtPlugin("org.scoverage" %% "sbt-coveralls" % "1.3.2")
-addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "2.0.6")
+addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "2.0.7")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.9.0")
 addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.5.11")
 
