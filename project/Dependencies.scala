@@ -15,7 +15,7 @@ object Dependencies {
     val zioConfMagnoliaV = "3.0.6"
     val zioConfTypesafeV = "3.0.6"
     val zioCryptoV = "0.0.1"
-    val zioPreludeV = "1.0.0-RC16"
+    val zioPreludeV = "1.0.0-RC18"
     val zioSchemaV = "0.3.1"
 
     val zioArangodbV = "0.1.1"
