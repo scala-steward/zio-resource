@@ -20,7 +20,7 @@ object Dependencies {
 
     val zioArangodbV = "0.1.1"
 
-    val logBackV = "1.4.5"
+    val logBackV = "1.4.6"
     val scalaUriV = "4.0.3"
     val scodecV = "2.2.0"
     val testContainersV = "0.40.12"
