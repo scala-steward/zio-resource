@@ -52,7 +52,7 @@ trait RestMockService:
 
 object RestResourceApiSpec extends ZIOSpecDefault with RestMockService:
 
-  val app = RestResourceApi.app.provideSomeLayer(ZLayer(ZIO.succeed(inMemoryRestService)))
+  val app = RestResourceApi.app.provideSomeLayer(ZLayer(ZIO.succeed(inMemoryRestService))).runZIO
 
   extension (req: Request) def json: Request = req.addHeader("content-type", "application/json")
 

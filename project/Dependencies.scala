@@ -4,23 +4,23 @@ object Dependencies {
 
   object Versions {
 
-    val tapirV = "1.1.0"
-    val sttpClientV = "3.7.6"
+    val tapirV = "1.1.4"
+    val sttpClientV = "3.8.13"
 
-    val zioV = "2.0.5"
+    val zioV = "2.0.10"
     val zioConfigV = "3.0.2"
-    val zioHttpV = "0.0.3"
+    val zioHttpV = "0.0.5"
     val zioLoggingV = "2.1.0"
-    val zioJsonV = "0.4.2"
-    val zioConfMagnoliaV = "3.0.6"
-    val zioConfTypesafeV = "3.0.6"
+    val zioJsonV = "0.5.0"
+    val zioConfMagnoliaV = "3.0.7"
+    val zioConfTypesafeV = "3.0.7"
     val zioCryptoV = "0.0.1"
-    val zioPreludeV = "1.0.0-RC16"
-    val zioSchemaV = "0.3.1"
+    val zioPreludeV = "1.0.0-RC18"
+    val zioSchemaV = "0.4.9"
 
-    val zioArangodbV = "0.1.1"
+    val zioArangodbV = "0.2.0"
 
-    val logBackV = "1.4.5"
+    val logBackV = "1.4.6"
     val scalaUriV = "4.0.3"
     val scodecV = "2.2.0"
     val testContainersV = "0.40.12"

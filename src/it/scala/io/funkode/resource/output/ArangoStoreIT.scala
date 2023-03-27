@@ -171,7 +171,6 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
         )
       }
     ).provideShared(
-      Scope.default,
       ArangoConfiguration.default,
       Client.default,
       ArangoClientJson.testContainers,
