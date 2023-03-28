@@ -4,7 +4,7 @@ object Dependencies {
 
   object Versions {
 
-    val tapirV = "1.1.4"
+    val tapirV = "1.2.11"
     val sttpClientV = "3.8.13"
 
     val zioV = "2.0.10"
