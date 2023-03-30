@@ -16,9 +16,9 @@ object Dependencies {
     val zioConfTypesafeV = "3.0.7"
     val zioCryptoV = "0.0.1"
     val zioPreludeV = "1.0.0-RC18"
-    val zioSchemaV = "0.4.9"
+    val zioSchemaV = "0.4.10"
 
-    val zioArangodbV = "0.2.0"
+    val zioArangodbV = "0.2.1"
 
     val logBackV = "1.4.6"
     val scalaUriV = "4.0.3"
@@ -35,14 +35,6 @@ object Dependencies {
   object Libraries {
 
     import Versions._
-    private val mill = "com.softwaremill.sttp"
-
-    val sttpClient = s"$mill.client3" %% "zio-json" % sttpClientV
-    val tapirZioHttpServer = s"$mill.tapir" %% "tapir-zio-http-server" % tapirV
-    val tapirPrometheus = s"$mill.tapir" %% "tapir-prometheus-metrics" % tapirV
-    val tapirSwagger = s"$mill.tapir" %% "tapir-swagger-ui-bundle" % tapirV
-    val tapirJsonZio = s"$mill.tapir" %% "tapir-json-zio" % tapirV
-    val tapirSttpStubServer = s"$mill.tapir" %% "tapir-sttp-stub-server" % tapirV
 
     val zio = "dev.zio" %% "zio" % zioV
     val zioConcurrent = "dev.zio" %% "zio-concurrent" % zioV
