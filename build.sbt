@@ -57,7 +57,7 @@ ThisBuild / scalacOptions ++=
     "-Yretain-trees"
   ) ++ Seq("-rewrite", "-indent") ++ Seq("-source", "future-migration")
 
-lazy val commonLibs = Seq(scalaUri, logBack, zioPrelude, jansi, zioConfMagnolia, zioConfTypesafe)
+lazy val commonLibs = Seq(scalaUri, logBack, zioConfMagnolia, zioConfTypesafe)
 lazy val zioLibs = Seq(zio, zioHttp, zioJson, zioConcurrent, zioConfMagnolia, zioConfTypesafe)
 lazy val testLibs = Seq(zioTest, zioTestSbt, zioJGolden).map(_ % "it, test")
 
@@ -70,7 +70,7 @@ lazy val root =
     .settings(
       Seq(
         name := "zio-resource",
-        libraryDependencies ++= (commonLibs ++ testLibs ++ Seq(zioSchema, zioArangodb)),
+        libraryDependencies ++= (commonLibs ++ testLibs ++ Seq(zioArangodb)),
         testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
       ),
       headerLicense := Some(HeaderLicense.MIT("2023", "Carlos Verdes", HeaderLicenseStyle.SpdxSyntax))
