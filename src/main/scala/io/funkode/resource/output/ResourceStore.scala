@@ -141,3 +141,5 @@ object ResourceStore:
               .NotFoundError(urn, Some(new Throwable(s"Rel type $relType not found for urn: $urn")))
           )
       )
+
+  def inMemory: ZLayer[Any, ResourceError, ResourceStore] = ZLayer(ZIO.succeed(new InMemoryStore {}))

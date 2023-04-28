@@ -11,6 +11,7 @@ import io.lemonlabs.uri.Urn
 import zio.*
 
 import io.funkode.resource.model.*
+import io.funkode.resource.output.ResourceStore
 
 type ResourceIO[R] = IO[ResourceError, R]
 
@@ -32,3 +33,13 @@ object ResourceInputService:
   def upsertResource(resource: Resource): WithService[Resource] = withService(_.upsertResource(resource))
 
   // def deleteResource(urn: Urn): WithService[Resource] = withService(_.deleteResource(urn))
+
+  class BasicInputService(store: ResourceStore) extends ResourceInputService:
+    override def getResourceByUrn(urn: Urn): ResourceIO[Resource] =
+      store.fetchOne(urn)
+
+    override def upsertResource(resource: Resource): ResourceIO[Resource] =
+      store.save(resource)
+
+  def default: ZLayer[ResourceStore, ResourceError, ResourceInputService] =
+    ZLayer(ZIO.service[ResourceStore].map(new BasicInputService(_)))

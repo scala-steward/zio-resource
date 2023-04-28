@@ -35,24 +35,12 @@ trait RestMockService:
        |}
        |""".stripMargin
 
-  val inMemoryRestService = new ResourceInputService:
-
-    private val store = new ResourceStore.InMemoryStore {}
-
-    override def getResourceByUrn(urn: Urn): ResourceIO[Resource] =
-      store.fetchOne(urn)
-
-    override def upsertResource(resource: Resource): ResourceIO[Resource] =
-      store.save(resource)
-
-    /*
-    override def deleteResource(urn: Urn): ResourceIO[Resource] =
-      store.fetch(urn).flatMap(resource => store.)
-     */
-
 object RestResourceApiSpec extends ZIOSpecDefault with RestMockService:
 
-  val app = RestResourceApi.app.provideSomeLayer(ZLayer(ZIO.succeed(inMemoryRestService))).runZIO
+  val app = RestResourceApi.app
+    .provideSomeLayer(ResourceStore.inMemory)
+    .provideSomeLayer(ResourceInputService.default)
+    .runZIO
 
   extension (req: Request) def json: Request = req.addHeader("content-type", "application/json")
 
@@ -73,4 +61,4 @@ object RestResourceApiSpec extends ZIOSpecDefault with RestMockService:
           assertTrue(fetchedResource.urn == Urn("customers", "123")) &&
           assertTrue(fetchedCustomer == roger)
       }
-    )
+    ).provideShared(ResourceStore.inMemory)

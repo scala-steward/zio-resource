@@ -27,28 +27,26 @@ object InMemoryStoreSpec extends ZIOSpecDefault:
     def resourceNid: String = "owners"
     def resourceNss(r: Owner): String = r.id
 
-  val store = new ResourceStore.InMemoryStore {}
-
   override def spec: Spec[TestEnvironment, Any] =
     suite("In memory resource store should")(
       test("Return not found error if resource doesn't exist") {
-        for error <- store.fetchOne(Urn("resource", "doesnotexist")).flip
+        for error <- ResourceStore.fetchOne(Urn("resource", "doesnotexist")).flip
         yield assertTrue(error == ResourceError.NotFoundError(Urn("resource", "doesnotexist")))
       },
       test("Store and fetch resource by urn") {
         for
-          storedResource <- store.save(Resource.fromAddressableClass(Car("123", "Honda", "Civic")))
+          storedResource <- ResourceStore.save(Resource.fromAddressableClass(Car("123", "Honda", "Civic")))
           storedCar <- storedResource.of[Car].body
-          fetchedResource <- store.fetchOneAs[Car](Urn("cars", "123"))
+          fetchedResource <- ResourceStore.fetchOneAs[Car](Urn("cars", "123"))
           fetchedCar <- fetchedResource.body
         yield assertTrue(storedCar == fetchedCar)
       },
       test("Link and fetch rel resources") {
         for
-          storedCar <- store.save(Resource.fromAddressableClass(Car("53", "Mercedes", "GLE")))
-          storedOwner <- store.save(Resource.fromAddressableClass(Owner("abc", "Roger")))
-          _ <- store.link(storedOwner.urn, "owns", storedCar.urn)
-          ownedCars <- store.fetchRel(Urn("owners", "abc"), "owns").mapZIO(_.of[Car].body).runCollect
+          storedCar <- ResourceStore.save(Resource.fromAddressableClass(Car("53", "Mercedes", "GLE")))
+          storedOwner <- ResourceStore.save(Resource.fromAddressableClass(Owner("abc", "Roger")))
+          _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar.urn)
+          ownedCars <- ResourceStore.fetchRel(Urn("owners", "abc"), "owns").mapZIO(_.of[Car].body).runCollect
         yield assertTrue(ownedCars == Chunk(Car("53", "Mercedes", "GLE")))
       }
-    )
+    ).provideShared(ResourceStore.inMemory)
