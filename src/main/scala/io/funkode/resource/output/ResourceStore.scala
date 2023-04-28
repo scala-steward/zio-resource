@@ -35,10 +35,7 @@ trait ResourceStore:
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
   def fetchOne(urn: Urn): ResourceApiCall[Resource] =
-    for
-      fetchOption <- fetch(urn).runHead
-      result <- ZIO.fromOption(fetchOption).orElseFail(ResourceError.NotFoundError(urn, None))
-    yield result
+    fetch(urn).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
 
   inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceStream[Resource.Of[R]] =
     fetch(urn).map(_.of[R])
@@ -55,6 +52,18 @@ trait ResourceStore:
       inline typedResource: Resource.Of[R]
   ): ResourceApiCall[Resource] =
     save(typedResource.asJsonResource)
+
+  inline def fetchOneRel(urn: Urn, relType: String): ResourceApiCall[Resource] =
+    fetchRel(urn, relType).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
+
+  inline def fetchRelAs[R: Resource.Addressable](urn: Urn, relType: String): ResourceStream[Resource.Of[R]] =
+    fetchRel(urn, relType).map(_.of[R])
+
+  inline def fetchOneRelAs[R: Resource.Addressable](
+      urn: Urn,
+      relType: String
+  ): ResourceApiCall[Resource.Of[R]] =
+    fetchOneRel(urn, relType).map(_.of[R])
 
 object ResourceStore:
 
@@ -88,6 +97,21 @@ object ResourceStore:
       inline typedResource: Resource.Of[R]
   ): WithResourceStore[Resource] =
     withStore(_.save(typedResource))
+
+  inline def fetchOneRel(urn: Urn, relType: String): WithResourceStore[Resource] =
+    withStore(_.fetchOneRel(urn, relType))
+
+  inline def fetchRelAs[R: Resource.Addressable](
+      urn: Urn,
+      relType: String
+  ): WithResourceStreamStore[Resource.Of[R]] =
+    withStreamStore(_.fetchRelAs[R](urn, relType))
+
+  inline def fetchOneRelAs[R: Resource.Addressable](
+      urn: Urn,
+      relType: String
+  ): WithResourceStore[Resource.Of[R]] =
+    withStore(_.fetchOneRelAs[R](urn, relType))
 
   def delete(urn: Urn): WithResourceStore[Unit] = withStore(_.delete(urn))
 

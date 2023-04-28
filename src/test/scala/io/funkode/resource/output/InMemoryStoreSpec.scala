@@ -46,7 +46,11 @@ object InMemoryStoreSpec extends ZIOSpecDefault:
           storedCar <- ResourceStore.save(Resource.fromAddressableClass(Car("53", "Mercedes", "GLE")))
           storedOwner <- ResourceStore.save(Resource.fromAddressableClass(Owner("abc", "Roger")))
           _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar.urn)
-          ownedCars <- ResourceStore.fetchRel(Urn("owners", "abc"), "owns").mapZIO(_.of[Car].body).runCollect
-        yield assertTrue(ownedCars == Chunk(Car("53", "Mercedes", "GLE")))
+          _ <- ResourceStore.link(storedCar.urn, "ownedBy", storedOwner.urn)
+          ownedCars <- ResourceStore.fetchRelAs[Car](storedOwner.urn, "owns").mapZIO(_.body).runCollect
+          carOwner <- ResourceStore.fetchOneRelAs[Owner](storedCar.urn, "ownedBy").flatMap(_.body)
+        yield assertTrue(ownedCars == Chunk(Car("53", "Mercedes", "GLE"))) && assertTrue(
+          carOwner == Owner("abc", "Roger")
+        )
       }
     ).provideShared(ResourceStore.inMemory)
