@@ -121,6 +121,20 @@ object ResourceStore:
   def fetchRel(urn: Urn, relType: String): WithResourceStreamStore[Resource] =
     withStreamStore(_.fetchRel(urn, relType))
 
+  extension [R, A](resourceIO: ZIO[R, ResourceError, Resource.Of[A]])
+    def body: ZIO[R, ResourceError, A] =
+      resourceIO.flatMap(_.body)
+
+  extension [R, A](resourceIO: ZIO[R, ResourceError, A])
+    def ifNotFound(f: ResourceError.NotFoundError => ZIO[R, ResourceError, A]): ZIO[R, ResourceError, A] =
+      resourceIO.catchSome { case e: ResourceError.NotFoundError => f(e) }
+
+  extension [A](inline resourceIO: WithResourceStore[Resource.Of[A]])
+    inline def saveIfNotFound(inline alternativeResource: => A)(using
+        Addressable[A]
+    ): WithResourceStore[Resource.Of[A]] =
+      resourceIO.ifNotFound(_ => ResourceStore.save(alternativeResource))
+
   trait InMemoryStore extends ResourceStore:
 
     private val storeMap: collection.mutable.Map[Urn, Resource] = collection.mutable.Map.empty

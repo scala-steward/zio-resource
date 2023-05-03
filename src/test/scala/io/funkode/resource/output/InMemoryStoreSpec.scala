@@ -13,6 +13,7 @@ import zio.json.*
 import zio.test.*
 
 import io.funkode.resource.model.*
+import ResourceStore.{ifNotFound, body}
 
 object InMemoryStoreSpec extends ZIOSpecDefault:
 
@@ -52,5 +53,18 @@ object InMemoryStoreSpec extends ZIOSpecDefault:
         yield assertTrue(ownedCars == Chunk(Car("53", "Mercedes", "GLE"))) && assertTrue(
           carOwner == Owner("abc", "Roger")
         )
+      },
+      test("Call effect if not found") {
+        for
+          carIfNotFound <- ResourceStore
+            .fetchOneAs[Car](Urn("cars", "that-not-exist"))
+            .body
+            .ifNotFound(e => ZIO.succeed(Car(e.urn.toString, "created", "when-not-found")))
+          savedIfNotFound <- ResourceStore
+            .fetchOneAs[Car](Urn("cars", "that-not-exist"))
+            .saveIfNotFound(Car("saved", "when", "not-found"))
+            .body
+        yield assertTrue(carIfNotFound == Car("urn:cars:that-not-exist", "created", "when-not-found")) &&
+          assertTrue(savedIfNotFound == Car("saved", "when", "not-found"))
       }
-    ).provideShared(ResourceStore.inMemory)
+    ).provide(ResourceStore.inMemory)
