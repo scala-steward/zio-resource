@@ -102,6 +102,11 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
             .runCollect
           transactionNetworkResource <- ResourceStore.fetchOneRelAs[Network](tx1.urn, "network")
           transactionNetwork <- transactionNetworkResource.body
+          _ <- ResourceStore.delete(tx1.urn)
+          netWorkTransactionsAfterDelete <- ResourceStore
+            .fetchRelAs[Transaction](ethNetwork.urn, "transactions")
+            .mapZIO(_.body)
+            .runCollect
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
           assertTrue(fetchedNetworkResource.etag.nonEmpty) &&
@@ -109,8 +114,8 @@ object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
           assertTrue(storedTx == fetchedTx) &&
           assertTrue(transactionNetworkResource.urn == ethNetworkUrn) &&
           assertTrue(transactionNetwork == ethNetwork) &&
-          assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2))
-
+          assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2)) &&
+          assertTrue(netWorkTransactionsAfterDelete == Chunk(tx2))
       },
       test("Manage not found error in raw resource") {
         val fakeUrn = Urn.parse("urn:network:doesnt:exist")

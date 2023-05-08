@@ -138,7 +138,7 @@ object ResourceStore:
   trait InMemoryStore extends ResourceStore:
 
     private val storeMap: collection.mutable.Map[Urn, Resource] = collection.mutable.Map.empty
-    private val linksMap: collection.mutable.Map[Urn, collection.mutable.Map[String, Resource]] =
+    private val linksMap: collection.mutable.Map[Urn, collection.mutable.Map[String, Chunk[Resource]]] =
       collection.mutable.Map.empty
 
     def resourceModel: ResourceModel = ResourceModel("in-mem", Map.empty)
@@ -150,7 +150,11 @@ object ResourceStore:
       ZIO.fromOption(storeMap.put(resource.urn, resource)).orElse(ZIO.succeed(resource))
 
     def delete(urn: Urn): ResourceApiCall[Unit] =
-      ZIO.succeed(linksMap.remove(urn)) *>
+      ZIO.succeed {
+        linksMap
+          .mapValuesInPlace((_, rels) => rels.mapValuesInPlace((_, relRes) => relRes.filter(_.urn != urn)))
+          .remove(urn)
+      } *>
         ZIO.fromOption(storeMap.remove(urn)).orElseFail(ResourceError.NotFoundError(urn)) *>
         ZIO.succeed(())
 
@@ -161,23 +165,22 @@ object ResourceStore:
           ZIO
             .fromOption(storeMap.get(rightUrn))
             .orElseFail(ResourceError.NotFoundError(rightUrn))
+
         _ <-
-          ZIO.succeed(
-            linksMap
-              .getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
-              .put(relType, rightResource)
-              .getOrElse(rightResource)
-          )
+          ZIO.succeed {
+            val relatedMap = linksMap.getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
+            val existingLinks = relatedMap.getOrElseUpdate(relType, Chunk.empty)
+            relatedMap.put(relType, existingLinks :+ rightResource)
+          }
       yield ()
 
     def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =
-      ZStream.fromZIO(
-        ZIO
-          .fromOption(linksMap.get(urn).map(_.get(relType)).flatten)
-          .orElseFail(
+      linksMap.get(urn).map(_.get(relType)) match
+        case Some(Some(rels)) => ZStream.fromChunk(rels)
+        case _ =>
+          ZStream.fail(
             ResourceError
               .NotFoundError(urn, Some(new Throwable(s"Rel type $relType not found for urn: $urn")))
           )
-      )
 
   def inMemory: ZLayer[Any, ResourceError, ResourceStore] = ZLayer(ZIO.succeed(new InMemoryStore {}))

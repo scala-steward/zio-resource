@@ -15,18 +15,27 @@ import zio.test.*
 import io.funkode.resource.model.*
 import ResourceStore.{ifNotFound, body}
 
-object InMemoryStoreSpec extends ZIOSpecDefault:
-
+trait CarsAndOwners:
   case class Car(vin: String, make: String, model: String) derives JsonCodec
   case class Owner(id: String, name: String) derives JsonCodec
 
   given Resource.Addressable[Car] = new Resource.Addressable[Car]:
     def resourceNid: String = "cars"
+
     def resourceNss(car: Car): String = car.vin
 
   given Resource.Addressable[Owner] = new Resource.Addressable[Owner]:
     def resourceNid: String = "owners"
+
     def resourceNss(r: Owner): String = r.id
+
+  val carHonda = Car("123", "Honda", "Civic")
+  val carMercedes = Car("1", "Mercedes", "GLE")
+  val carFord = Car("2", "Ford", "Ecosport")
+
+  val ownerRoger = Owner("abc", "Roger")
+
+object InMemoryStoreSpec extends ZIOSpecDefault with CarsAndOwners:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("In memory resource store should")(
@@ -36,23 +45,28 @@ object InMemoryStoreSpec extends ZIOSpecDefault:
       },
       test("Store and fetch resource by urn") {
         for
-          storedResource <- ResourceStore.save(Resource.fromAddressableClass(Car("123", "Honda", "Civic")))
+          storedResource <- ResourceStore.save(Resource.fromAddressableClass(carHonda))
           storedCar <- storedResource.of[Car].body
-          fetchedResource <- ResourceStore.fetchOneAs[Car](Urn("cars", "123"))
-          fetchedCar <- fetchedResource.body
+          fetchedCar <- ResourceStore.fetchOneAs[Car](carHonda.urn).body
         yield assertTrue(storedCar == fetchedCar)
       },
       test("Link and fetch rel resources") {
         for
-          storedCar <- ResourceStore.save(Resource.fromAddressableClass(Car("53", "Mercedes", "GLE")))
-          storedOwner <- ResourceStore.save(Resource.fromAddressableClass(Owner("abc", "Roger")))
-          _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar.urn)
-          _ <- ResourceStore.link(storedCar.urn, "ownedBy", storedOwner.urn)
-          ownedCars <- ResourceStore.fetchRelAs[Car](storedOwner.urn, "owns").mapZIO(_.body).runCollect
-          carOwner <- ResourceStore.fetchOneRelAs[Owner](storedCar.urn, "ownedBy").flatMap(_.body)
-        yield assertTrue(ownedCars == Chunk(Car("53", "Mercedes", "GLE"))) && assertTrue(
-          carOwner == Owner("abc", "Roger")
-        )
+          storedCar1 <- ResourceStore.save(Resource.fromAddressableClass(carMercedes))
+          storedCar2 <- ResourceStore.save(Resource.fromAddressableClass(carFord))
+          storedOwner <- ResourceStore.save(Resource.fromAddressableClass(ownerRoger))
+          _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar1.urn)
+          _ <- ResourceStore.link(storedCar1.urn, "ownedBy", storedOwner.urn)
+          ownedCars1 <- ResourceStore.fetchOneRelAs[Car](storedOwner.urn, "owns").body
+          carOwner <- ResourceStore.fetchOneRelAs[Owner](storedCar1.urn, "ownedBy").body
+          _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar2.urn)
+          ownedCars2 <- ResourceStore.fetchRelAs[Car](storedOwner.urn, "owns").mapZIO(_.body).runCollect
+          _ <- ResourceStore.delete(carMercedes.urn)
+          ownedCars3 <- ResourceStore.fetchRelAs[Car](storedOwner.urn, "owns").mapZIO(_.body).runCollect
+        yield assertTrue(ownedCars1 == carMercedes) &&
+          assertTrue(carOwner == Owner("abc", "Roger")) &&
+          assertTrue(ownedCars2 == Chunk(carMercedes, carFord)) &&
+          assertTrue(ownedCars3 == Chunk(carFord))
       },
       test("Call effect if not found") {
         for

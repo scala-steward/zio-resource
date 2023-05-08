@@ -30,6 +30,8 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
   import ArangoResourceStore.given
   implicit val jsonCodec: JsonCodec[Json] = JsonCodec[Json](Json.encoder, Json.decoder)
 
+  val graph = db.graph(GraphName(resourceModel.name))
+
   case class Rel(_rel: String, _from: DocumentHandle, _to: DocumentHandle, _key: DocumentKey)
       derives JsonCodec
 
@@ -84,7 +86,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
   def delete(urn: Urn): ResourceApiCall[Unit] =
     for
       _ <- fetchOne(urn)
-      _ <- db.document(urn).remove[Json]().handleErrors(urn)
+      _ <- graph.vertexDocument(urn).remove[Json]().handleErrors(urn)
     yield ()
 
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
@@ -168,24 +170,35 @@ object ArangoResourceStore:
 
       Resource.fromJsonStream(urn, body, etag)
 
+  extension [R, O](zio: ZIO[R, ArangoError, O])
+    def ignoreConflict: ZIO[R, ArangoError, Unit] = zio.map(_ => ()).ifConflict(ZIO.succeed(()))
+
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))
-
-    (db.createIfNotExist() *>
-      ZIO
+    val graph = db.graph(GraphName(resourceModel.name))
+    for
+      _ <- db.createIfNotExist().handleErrors(Urn("init", "db"))
+      _ <- graph.create().ignoreConflict.handleErrors(Urn("init", "db"))
+      _ <- ZIO
         .collectAll {
-          val createCollections = resourceModel.collections
+          val collections = resourceModel.collections
             .map(_._1)
             .map(CollectionName.apply)
-            .map(col => db.collection(col).createIfNotExist())
+
+          val createCollections = collections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
           val createRels = resourceModel.collections
-            .map(c => CollectionName(c._1 + "-rels"))
-            .map(col => db.collection(col).createEdgeIfNotExist())
+            .map { c =>
+              val sourceCollection = CollectionName(c._1)
+              val edgeName = CollectionName(c._1 + "-rels")
+              GraphEdgeDefinition(edgeName, List(sourceCollection), collections.toList)
+            }
+            .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
           createCollections ++ createRels
-        }).handleErrors(Urn.apply("init", "db")) *>
-      ZIO.succeed(db)
+        }
+        .handleErrors(Urn("init", "db"))
+    yield db
 
   inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
     ZLayer(
