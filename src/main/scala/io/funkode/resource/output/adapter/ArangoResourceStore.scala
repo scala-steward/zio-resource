@@ -93,7 +93,8 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
     val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
     db.collection(relCollection(leftUrn))
       .documents
-      .create(List(Rel(rel, leftUrn, rightUrn, linkKey)))
+      .insert(Rel(rel, leftUrn, rightUrn, linkKey))
+      .ignoreConflict
       .handleErrors(Urn.apply("rels", linkKey.unwrap))
       .map(_ => ())
 
@@ -124,22 +125,19 @@ object ArangoResourceStore:
   given fromDocHandleToUrn: Conversion[DocumentHandle, Urn] = docHandle =>
     Urn.parse(s"urn:${docHandle.collection.unwrap}:${docHandle.key.unwrap}")
 
-  def handleArrangoErrors(urn: Urn, t: Throwable): ResourceError = t match
-    case e @ ArangoError(404, _, message, _) => ResourceError.NotFoundError(urn, Some(e))
-    case e                                   => ResourceError.UnderlinedError(e)
+  def handleArangoErrors(urn: Urn, t: Throwable): ResourceError = t match
+    case e @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(e))
+    case e                             => ResourceError.UnderlinedError(e)
 
   extension [R](io: IO[Throwable, R])
     def handleErrors(urn: Urn): ResourceApiCall[R] =
-      io.catchAll(t =>
-        ZIO.logErrorCause(s"handleErrors for urn $urn", Cause.fail(t))
-        ZIO.fail(handleArrangoErrors(urn, t))
-      )
+      io.mapError(e => handleArangoErrors(urn, e))
 
   extension [R](stream: Stream[Throwable, R])
     def handleStreamErrors(urn: Urn): ResourceStream[R] =
       stream.catchAll(t =>
         ZIO.logErrorCause(s"handleStreamErrors for urn $urn", Cause.fail(t))
-        ZStream.fail(handleArrangoErrors(urn, t))
+        ZStream.fail(handleArangoErrors(urn, t))
       )
 
   extension (json: Json)
@@ -171,7 +169,9 @@ object ArangoResourceStore:
       Resource.fromJsonStream(urn, body, etag)
 
   extension [R, O](zio: ZIO[R, ArangoError, O])
-    def ignoreConflict: ZIO[R, ArangoError, Unit] = zio.map(_ => ()).ifConflict(ZIO.succeed(()))
+    def ignoreConflict: ZIO[R, ArangoError, Unit] = zio
+      .map(_ => ())
+      .ifConflict(ZIO.succeed(()))
 
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))
@@ -179,19 +179,23 @@ object ArangoResourceStore:
     for
       _ <- db.createIfNotExist().handleErrors(Urn("init", "db"))
       _ <- graph.create().ignoreConflict.handleErrors(Urn("init", "db"))
+      existingVertices <- graph.vertexCollections.handleErrors(Urn("init", "db"))
+      existingEdges <- graph.edgeCollections.handleErrors(Urn("init", "db"))
       _ <- ZIO
         .collectAll {
           val collections = resourceModel.collections
             .map(_._1)
             .map(CollectionName.apply)
+            .toList
+            .diff(existingVertices)
 
-          val createCollections = collections.map(col => graph.addVertexCollection(col).ignoreConflict)
+          val createCollections =
+            collections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
-          val createRels = resourceModel.collections
-            .map { c =>
-              val sourceCollection = CollectionName(c._1)
-              val edgeName = CollectionName(c._1 + "-rels")
-              GraphEdgeDefinition(edgeName, List(sourceCollection), collections.toList)
+          val createRels = collections
+            .map { sourceCollection =>
+              val edgeName = CollectionName(sourceCollection.unwrap + "-rels")
+              GraphEdgeDefinition(edgeName, List(sourceCollection), collections)
             }
             .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
