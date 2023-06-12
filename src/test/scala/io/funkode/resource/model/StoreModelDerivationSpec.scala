@@ -7,10 +7,6 @@
 package io.funkode.resource
 package model
 
-import scala.compiletime.*
-
-import zio.json.*
-import zio.schema.*
 import zio.test.*
 
 import io.funkode.portfolio.model.*

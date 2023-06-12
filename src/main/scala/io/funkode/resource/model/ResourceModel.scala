@@ -8,12 +8,6 @@ package io.funkode.resource
 package model
 
 import io.lemonlabs.uri.Urn
-import zio.*
-import zio.schema.*
-import zio.schema.Schema.Record
-import zio.schema.meta.MetaSchema
-
-import output.*
 
 case class ResourceModel(name: String, collections: Map[String, CollectionModel] = Map.empty)
 case class CollectionModel(collectionName: String, resourceType: String, rels: List[RelModel] = List.empty)

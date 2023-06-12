@@ -6,23 +6,12 @@
 
 package io.funkode.resource.model
 
-import scala.annotation.{switch, tailrec}
-import scala.collection.mutable.Stack
 import scala.compiletime.*
-import scala.deriving.Mirror
-import scala.quoted.{Expr, Quotes, Type}
 
 import cats.Show
-import cats.syntax.show.toShow
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
-import zio.json.JsonDecoder.JsonError
-import zio.json.ast.Json
-import zio.json.ast.Json.Num
-import zio.json.internal.*
-import zio.schema.*
-import zio.schema.meta.MetaSchema
 import zio.stream.*
 
 type ResourceStream[R] = Stream[ResourceError, R]
@@ -71,10 +60,9 @@ object Resource:
   ): Resource = new Resource:
     def urn: Urn = resourceUrn
     def body: ByteResourceStream =
-      bodyStream.mapError {
+      bodyStream.mapError:
         case e: ResourceError => e
         case t: Throwable     => ResourceError.SerializationError("Error reading resource body", Some(t))
-      }
     def format: ResourceFormat = ResourceFormat.Json
     def etag: Option[Etag] = resourceEtag
     def links: ResourceLinks = resourceLinks
@@ -101,19 +89,18 @@ object Resource:
 
   extension (inline resource: Resource)
     inline def of[R]: Resource.Of[R] =
-      summonFrom {
+      summonFrom:
         case given JsonDecoder[R] =>
           val parsedBody =
-            JsonDecoder[R].decodeJsonStreamInput(resource.body).mapError {
-              case e: ResourceError => e
-              case t: Throwable =>
-                ResourceError.SerializationError("Not able to deserialize resource body", Some(t))
-            }
+            JsonDecoder[R]
+              .decodeJsonStreamInput(resource.body)
+              .mapError:
+                case e: ResourceError => e
+                case t: Throwable =>
+                  ResourceError.SerializationError("Not able to deserialize resource body", Some(t))
 
           Resource.Of[R](resource.urn, parsedBody, resource.etag, resource.links)
         case _ => error("Missing Decoder for type" + codeOf(erasedValue[R]))
-
-      }
 
   extension [R: Resource.Addressable](inline typedResource: Resource.Of[R])
     inline def asJsonResource: Resource =
@@ -133,8 +120,6 @@ object Resource:
   trait Addressable[R]:
 
     self =>
-
-    import Resource.asJsonResource
 
     def resourceNid: String
     def resourceNss(r: R): String

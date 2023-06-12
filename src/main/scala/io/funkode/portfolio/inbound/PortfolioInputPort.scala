@@ -9,8 +9,6 @@ package inbound
 
 import zio.*
 
-import io.funkode.resource.model.*
-
 type InputPortCall[R] = ZIO[PortfolioService, PortfolioError, R]
 /*
 trait PortfolioInputPort[Encoder[_], Decoder[_], Body]:

@@ -8,7 +8,6 @@ package io.funkode.resource
 package output
 package adapter
 
-import scala.compiletime.*
 import scala.deriving.Mirror
 
 import io.lemonlabs.uri.Urn
@@ -62,10 +61,11 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
         val urn = resource.urn
 
         for
-          jsonDocument <- JsonDecoder[Json].decodeJsonStreamInput(resource.body).catchAll {
-            case t: Throwable =>
-              ZIO.fail(ResourceError.SerializationError("Error reading json resource body", Some(t)))
-          }
+          jsonDocument <- JsonDecoder[Json]
+            .decodeJsonStreamInput(resource.body)
+            .catchAll:
+              case t: Throwable =>
+                ZIO.fail(ResourceError.SerializationError("Error reading json resource body", Some(t)))
           vobject <- jsonDocument match
             case jsonObj: Json.Obj =>
               ZIO.succeed(JsonCodecs.jsonObjectToVObject(jsonObj))
@@ -182,7 +182,7 @@ object ArangoResourceStore:
       existingVertices <- graph.vertexCollections.handleErrors(Urn("init", "db"))
       existingEdges <- graph.edgeCollections.handleErrors(Urn("init", "db"))
       _ <- ZIO
-        .collectAll {
+        .collectAll:
           val collections = resourceModel.collections
             .map(_._1)
             .map(CollectionName.apply)
@@ -200,7 +200,6 @@ object ArangoResourceStore:
             .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
           createCollections ++ createRels
-        }
         .handleErrors(Urn("init", "db"))
     yield db
 

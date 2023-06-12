@@ -7,16 +7,8 @@
 package io.funkode.resource
 package output
 
-import scala.compiletime.*
-import scala.quoted.*
-
 import io.lemonlabs.uri.Urn
-import io.netty.util.internal.StringUtil
 import zio.*
-import zio.json.*
-import zio.json.ast.Json
-import zio.schema.*
-import zio.schema.meta.MetaSchema
 import zio.stream.*
 
 import io.funkode.resource.model.*
@@ -167,11 +159,10 @@ object ResourceStore:
             .orElseFail(ResourceError.NotFoundError(rightUrn))
 
         _ <-
-          ZIO.succeed {
+          ZIO.succeed:
             val relatedMap = linksMap.getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
             val existingLinks = relatedMap.getOrElseUpdate(relType, Chunk.empty)
             relatedMap.put(relType, existingLinks :+ rightResource)
-          }
       yield ()
 
     def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =

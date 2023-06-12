@@ -9,14 +9,10 @@ package io.funkode.portfolio
 import zio.*
 
 import io.funkode.portfolio.model.*
-import io.funkode.resource.model.*
-import io.funkode.resource.output.ResourceStore
 
 type PortfolioCall[R] = IO[PortfolioError, R]
 
 trait PortfolioService:
-
-  import Portfolio.*
 
   def addNetwork(network: Network): PortfolioCall[Network]
   def addTransaction(transaction: Transaction): PortfolioCall[Transaction]

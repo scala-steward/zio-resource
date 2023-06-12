@@ -3,18 +3,15 @@ package output
 
 import io.funkode.arangodb.*
 import io.funkode.arangodb.http.*
-import io.funkode.arangodb.http.JsonCodecs.given
-import io.lemonlabs.uri.{Url, Urn}
+import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
-import zio.json.ast.Json
 import zio.http.*
 import zio.test.*
 import adapter.ArangoResourceStore
 import io.funkode.portfolio
 import io.funkode.portfolio.model.*
 import io.funkode.resource.model.*
-import io.funkode.resource.model.given
 import io.funkode.resource.model.Resource.*
 import zio.stream.*
 

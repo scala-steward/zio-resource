@@ -11,7 +11,6 @@ package adapter
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.http.*
-import zio.http.model.*
 import zio.json.*
 import zio.test.*
 
