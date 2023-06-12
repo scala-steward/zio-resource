@@ -4,7 +4,6 @@ import Libraries.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 Test / fork := true
-IntegrationTest / fork := true
 
 inThisBuild(
   Seq(
@@ -61,14 +60,12 @@ ThisBuild / scalacOptions ++=
 
 lazy val commonLibs = Seq(scalaUri, logBack, zioConfMagnolia, zioConfTypesafe)
 lazy val zioLibs = Seq(zio, zioHttp, zioJson, zioConcurrent, zioConfMagnolia, zioConfTypesafe)
-lazy val testLibs = Seq(zioTest, zioTestSbt, zioJGolden).map(_ % "it, test")
+lazy val testLibs = Seq(zioTest, zioTestSbt, zioJGolden).map(_ % "test")
 
 lazy val root =
   project
     .in(file("."))
-    .configs(IntegrationTest)
-    .settings(Defaults.itSettings)
-    .settings(headerSettings(Test, IntegrationTest))
+    .settings(headerSettings(Test))
     .settings(
       Seq(
         name := "zio-resource",
@@ -79,6 +76,15 @@ lazy val root =
     )
     .enablePlugins(AutomateHeaderPlugin)
 
+lazy val integration = (project in file("integration"))
+  .dependsOn(root)
+  .settings(
+    headerSettings(Test),
+    publish / skip := true,
+    // test dependencies
+    libraryDependencies ++= testLibs,
+  )
+
 ThisBuild / coverageExcludedFiles := ".*Main.*;zio\\.json\\.*"
 
 addCommandAlias("ll", "projects")
@@ -87,5 +93,5 @@ addCommandAlias("testAll", ";compile;test;stryker")
 //addCommandAlias("sanity", ";compile;scalafmtAll;test;stryker")
 addCommandAlias(
   "sanity",
-  ";clean;coverage;compile;headerCreate;scalafixAll;scalafmtAll;test;it:test;coverageAggregate;coverageOff"
+  ";clean;coverage;compile;headerCreate;scalafixAll;scalafmtAll;root/test;integration/test;coverageAggregate;coverageOff"
 )
