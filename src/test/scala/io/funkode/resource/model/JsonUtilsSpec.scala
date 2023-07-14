@@ -6,7 +6,6 @@
 
 package io.funkode.resource.model
 
-import io.lemonlabs.uri.Urn
 import zio.Chunk
 import zio.json.*
 import zio.json.ast.Json

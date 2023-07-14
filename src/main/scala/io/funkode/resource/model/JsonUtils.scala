@@ -8,21 +8,13 @@ package io.funkode.resource.model
 
 import scala.annotation.{switch, tailrec}
 import scala.collection.mutable.Stack
-import scala.compiletime.*
-import scala.deriving.Mirror
-import scala.quoted.{Expr, Quotes, Type}
 
-import cats.Show
-import cats.syntax.show.toShow
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
 import zio.json.JsonDecoder.JsonError
 import zio.json.ast.Json
-import zio.json.ast.Json.Num
 import zio.json.internal.*
-import zio.schema.*
-import zio.schema.meta.MetaSchema
 import zio.stream.*
 
 object JsonUtils:
@@ -39,14 +31,11 @@ object JsonUtils:
 
   def normalizeJsonStream(jsonStream: ByteResourceStream): ResourceStream[Json] =
     for
-      in <- ZStream.scoped {
-        jsonStream.toInputStream
-          .flatMap(is =>
-            ZIO
-              .fromAutoCloseable(ZIO.succeed(new java.io.InputStreamReader(is)))
-              .map(isr => new zio.json.internal.WithRetractReader(isr))
-          )
-      }
+      in <- ZStream.scoped:
+        jsonStream.toInputStream.flatMap: is =>
+          ZIO
+            .fromAutoCloseable(ZIO.succeed(new java.io.InputStreamReader(is)))
+            .map(isr => new zio.json.internal.WithRetractReader(isr))
       fullDoc <- normalizeJson(in)
     yield fullDoc
 
@@ -57,10 +46,10 @@ object JsonUtils:
 
     Lexer.char(trace, in, '{')
 
-    ZStream.paginateZIO[Any, ResourceError, Json, Stack[JsonParsingPhase]](Stack(JsonParsingPhase.Root)) {
+    ZStream.paginateZIO[Any, ResourceError, Json, Stack[JsonParsingPhase]](Stack(JsonParsingPhase.Root)):
       parsing =>
         ZIO
-          .attemptBlocking {
+          .attemptBlocking:
             val builder = Map.newBuilder[String, Json]
 
             val currentlyParsing = parsing.top
@@ -108,14 +97,12 @@ object JsonUtils:
                       state = json -> (if stack.nonEmpty then Some(stack) else None)
 
             state
-          }
           .catchAll { case t: Throwable =>
             println(s"Error with streaming ${trace.length}")
             trace.foreach(println)
             t.printStackTrace()
             ZIO.fail(ResourceError.NormalizationError("Error reading stream", Some(t)))
           }
-    }
 
   @tailrec
   private def cleanStack(

@@ -9,11 +9,8 @@ package io.funkode.resource.model
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
-import zio.json.ast.Json
-import zio.stream.{ZSink, ZStream}
 import zio.test.*
 
-import io.funkode.portfolio.model.Portfolio
 import io.funkode.resource.model.StoreModelDerivationSpec.{suite, test}
 
 trait ResourceExamples:

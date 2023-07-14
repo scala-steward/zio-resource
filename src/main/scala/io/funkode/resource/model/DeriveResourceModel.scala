@@ -7,14 +7,10 @@
 package io.funkode.resource.model
 
 import scala.compiletime.*
-import scala.compiletime.ops.any.*
-import scala.compiletime.ops.string.*
 import scala.deriving.Mirror
-import scala.quoted.*
 
 object DeriveResourceModel:
 
-  import CollectionModelDerivation.given
   import DerivationUtils.*
 
   transparent inline def decapitalize(inline str: String): String =
