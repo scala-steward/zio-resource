@@ -7,7 +7,7 @@ object Dependencies {
     val tapirV = "1.1.4"
     val sttpClientV = "3.8.13"
 
-    val zioV = "2.0.12"
+    val zioV = "2.0.15"
     val zioConfigV = "3.0.2"
     val zioHttpV = "0.0.5"
     val zioLoggingV = "2.1.0"
@@ -18,7 +18,7 @@ object Dependencies {
     val zioPreludeV = "1.0.0-RC18"
     val zioSchemaV = "0.4.10"
 
-    val zioArangodbV = "0.3.0"
+    val zioArangodbV = "0.3.1"
 
     val logBackV = "1.4.8"
     val scalaUriV = "4.0.3"

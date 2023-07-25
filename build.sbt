@@ -64,7 +64,7 @@ lazy val testLibs = Seq(zioTest, zioTestSbt, zioJGolden).map(_ % "test")
 
 lazy val root =
   project
-    .in(file("."))
+    .in(file("root"))
     .settings(headerSettings(Test))
     .settings(
       Seq(

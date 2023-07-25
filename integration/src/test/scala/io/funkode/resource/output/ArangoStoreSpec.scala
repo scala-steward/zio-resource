@@ -1,19 +1,20 @@
 package io.funkode.resource
 package output
 
-import io.funkode.arangodb.*
-import io.funkode.arangodb.http.*
 import io.lemonlabs.uri.Urn
 import zio.*
-import zio.json.*
 import zio.http.*
+import zio.json.*
+import zio.stream.*
 import zio.test.*
-import adapter.ArangoResourceStore
+
+import io.funkode.arangodb.*
+import io.funkode.arangodb.http.*
 import io.funkode.portfolio
 import io.funkode.portfolio.model.*
 import io.funkode.resource.model.*
 import io.funkode.resource.model.Resource.*
-import zio.stream.*
+import adapter.ArangoResourceStore
 
 trait TransactionsExamples:
 
@@ -72,7 +73,7 @@ trait TransactionsExamples:
   val tx1Resource = Resource.fromJsonStream(tx1Urn, ZStream.fromIterable(tx1JsonString.getBytes()))
   val tx2Resource = Resource.fromJsonStream(tx2Urn, ZStream.fromIterable(tx2JsonString.getBytes()))
 
-object ArangoStoreIT extends ZIOSpecDefault with TransactionsExamples:
+object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(

@@ -47,12 +47,12 @@ object RestResourceApiSpec extends ZIOSpecDefault with RestMockService:
     suite("Resource Rest API")(
       test("Get a Resource from HTTP GET request") {
         for
-          resourceNotFound <- app(Request.get(URL(!! / "customers" / "123")).json).flip
+          resourceNotFound <- app(Request.get(URL(Root / "customers" / "123")).json).flip
           storedResource <- app(
-            Request.put(Body.fromString(customerJson), URL(!! / "customers" / "123")).json
+            Request.put(Body.fromString(customerJson), URL(Root / "customers" / "123")).json
           )
           storedCustomer <- storedResource.of[Customer].body
-          fetchedResource <- app(Request.get(URL(!! / "customers" / "123")).json)
+          fetchedResource <- app(Request.get(URL(Root / "customers" / "123")).json)
           fetchedCustomer <- fetchedResource.of[Customer].body
         yield assertTrue(resourceNotFound == Some(ResourceError.NotFoundError(Urn("customers", "123")))) &&
           assertTrue(storedResource.urn == Urn("customers", "123")) &&
