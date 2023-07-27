@@ -13,7 +13,9 @@ import zio.json.*
 import io.funkode.resource.model.*
 import JsonUtils.given
 
-sealed trait Portfolio
+sealed trait PortfolioTrait
+type PortfolioType = Network & Transaction
+case class PortfolioCaseClass(network: Network, transaction: Transaction)
 
 case class Network(
     id: String,
@@ -21,7 +23,7 @@ case class Network(
     name: String,
     currency: String,
     transactions: List[Transaction] = List.empty
-) extends Portfolio
+) extends PortfolioTrait
     derives JsonCodec
 
 case class Transaction(
@@ -29,14 +31,16 @@ case class Transaction(
     hash: String,
     timestamp: Long,
     next: Option[Transaction] = None
-) extends Portfolio
+) extends PortfolioTrait
     derives JsonCodec
 
-object Portfolio:
+object Network:
 
   given Resource.Addressable[Network] with
     def resourceNid: String = "network"
     def resourceNss(network: Network): String = network.id
+
+object Transaction:
 
   given Resource.Addressable[Transaction] with
     def resourceNid: String = "tx"

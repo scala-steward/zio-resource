@@ -11,6 +11,11 @@ import scala.quoted.*
 
 object DerivationUtils:
 
+  transparent inline def decapitalize(inline str: String): String =
+    inline str match
+      case null | "" => str
+      case nonEmpty  => s"${nonEmpty.head.toLower}${nonEmpty.tail}"
+
   inline def getTypeStringFromTuple[T <: Tuple]: List[String] =
     inline erasedValue[T] match
       case _: EmptyTuple => Nil

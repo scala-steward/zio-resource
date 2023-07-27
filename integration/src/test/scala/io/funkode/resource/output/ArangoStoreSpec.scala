@@ -24,8 +24,6 @@ trait TransactionsExamples:
     def resourceNid: String = "badModel"
     def resourceNss(r: BadModel): String = r.asdfasdfadsfsa
 
-  import Portfolio.given
-
   val hash1 = "0x888333"
   val hash2 = "0x999333"
   val timestamp1 = 1L
@@ -174,5 +172,5 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
       ArangoConfiguration.default,
       Client.default,
       ArangoClientJson.testContainers,
-      ArangoResourceStore.derived[Portfolio]
+      ArangoResourceStore.derived[PortfolioTrait]
     )
