@@ -25,12 +25,9 @@ object DeriveResourceModelTasty:
 
     def nameFromType(tpe: TypeRepr, name: String = ""): String =
       tpe match
-        case atpe: AndType =>
-          nameFromType(atpe.right, decapitalize(name + atpe.left.typeSymbol.name) + "And")
-        case otpe: OrType =>
-          nameFromType(otpe.right, decapitalize(name + otpe.left.typeSymbol.name) + "Or")
-        case n: NamedType =>
-          decapitalize(name + n.name)
+        case atpe: AndType => nameFromType(atpe.left, "And" + atpe.right.typeSymbol.name + name)
+        case otpe: OrType  => nameFromType(otpe.left, "Or" + otpe.right.typeSymbol.name + name)
+        case n: NamedType  => decapitalize(n.name) + name
 
     def relTargetTypeFromTpe(tpe: TypeRepr): String =
       tpe.typeSymbol.tree match
@@ -45,12 +42,8 @@ object DeriveResourceModelTasty:
             case other        => reportError(s"Can't extract target type from tpe: " + other.show)
         case other => reportError(s"Can't extract target type from non ValDef: " + other.show)
 
-    def relsFromType[T: Type](collectionTypes: List[String]): Expr[List[RelModel]] =
-
-      val tpe = TypeRepr.of[T]
-      val symbol = tpe.typeSymbol
-
-      val rels = symbol.declaredFields
+    def relsFromSymbol(symbol: Symbol, collectionTypes: List[String]): List[RelModel] =
+      symbol.declaredFields
         .map(_.typeRef)
         .map(tRef =>
           val rel = tRef.name
@@ -60,15 +53,26 @@ object DeriveResourceModelTasty:
           RelModel(rel, targetType, oneToMany)
         )
         .filter(relModel => collectionTypes.contains(relModel.targetType))
-        .map(relModel =>
-          val rel = Expr(relModel.rel)
-          val targetType = Expr(relModel.targetType)
-          val oneToMany = Expr(relModel.oneToMany)
 
-          '{ RelModel(${ rel }, ${ targetType }, ${ oneToMany }) }
-        )
+    def relsFromType[T: Type](collectionTypes: List[String]): Expr[List[RelModel]] =
 
-      Expr.ofList(rels)
+      val tpe = TypeRepr.of[T]
+      val symbol = tpe.typeSymbol
+
+      val rels =
+        if symbol.children.nonEmpty then
+          symbol.children.map(s => relsFromSymbol(s, collectionTypes)).toSet.toList.flatten
+        else relsFromSymbol(symbol, collectionTypes)
+
+      val relExpressions = rels.map(relModel =>
+        val rel = Expr(relModel.rel)
+        val targetType = Expr(relModel.targetType)
+        val oneToMany = Expr(relModel.oneToMany)
+
+        '{ RelModel(${ rel }, ${ targetType }, ${ oneToMany }) }
+      )
+
+      Expr.ofList(relExpressions)
 
     def collectionFromType[T: Type](collectionTypes: List[String] = List.empty): Expr[CollectionModel] =
 
@@ -85,17 +89,17 @@ object DeriveResourceModelTasty:
 
     def internalSymbolsFromTpe(tpe: TypeRepr, acum: List[Symbol] = List.empty): List[Symbol] =
       tpe match
-        case a: AndType   => internalSymbolsFromTpe(a.right, acum :+ a.left.typeSymbol)
-        case o: OrType    => internalSymbolsFromTpe(o.right, acum :+ o.left.typeSymbol)
-        case _: NamedType => acum :+ tpe.typeSymbol
+        case a: AndType   => internalSymbolsFromTpe(a.left, a.right.typeSymbol +: acum)
+        case o: OrType    => internalSymbolsFromTpe(o.left, o.right.typeSymbol +: acum)
+        case _: NamedType => tpe.typeSymbol +: acum
 
     def symbolsFromTpe(tpe: TypeRepr): List[Symbol] =
       tpe match
-        case a: AndType => internalSymbolsFromTpe(a.right, List(a.left.typeSymbol))
-        case o: OrType  => internalSymbolsFromTpe(o.right, List(o.left.typeSymbol))
+        case a: AndType => internalSymbolsFromTpe(a.left, List(a.right.typeSymbol))
+        case o: OrType  => internalSymbolsFromTpe(o.left, List(o.right.typeSymbol))
         case _: NamedType =>
           tpe.typeSymbol.tree match
-            case TypeDef(name, tree) =>
+            case TypeDef(_, tree) =>
               tree match
                 case applied: Applied => internalSymbolsFromTpe(applied.tpe)
                 case other            => reportError(s"Can't extract symbols from type def: " + other.show)

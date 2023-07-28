@@ -8,6 +8,7 @@ package io.funkode.resource
 package model
 
 import zio.test.*
+
 import io.funkode.portfolio.model.*
 
 trait PortfolioSampleModel:
@@ -25,10 +26,16 @@ trait PortfolioSampleModel:
     List(RelModel("next", s"$mainPackage.Transaction", false))
   )
 
+  val assetCollectionModel = CollectionModel(
+    "asset",
+    s"$mainPackage.Asset",
+    List(RelModel("network", s"$mainPackage.Network", false))
+  )
+
   def expectedModel(name: String) =
     ResourceModel(
       name,
-      Map("network" -> networkCollectionModel, "tx" -> txCollectionModel)
+      Map("network" -> networkCollectionModel, "tx" -> txCollectionModel, "asset" -> assetCollectionModel)
     )
 
 object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel:
@@ -40,7 +47,7 @@ object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel
         val graphModel: ResourceModel = DeriveResourceModelTasty.gen[PortfolioTrait]
         assertTrue(
           graphModel == expectedModel("portfolioTrait")
-        ) // && assertTrue(graphModelEnum == expectedModel)
+        )
       },
       test("Create ResourceModel from type") {
 
@@ -54,10 +61,10 @@ object StoreModelDerivationSpec extends ZIOSpecDefault with PortfolioSampleModel
       },
       test("Create ResourceModel from And and Or types") {
 
-        val graphModelAnd: ResourceModel = DeriveResourceModelTasty.gen[Network & Transaction]
-        val graphModelOr: ResourceModel = DeriveResourceModelTasty.gen[Network | Transaction]
+        val graphModelAnd: ResourceModel = DeriveResourceModelTasty.gen[Network & Transaction & Asset]
+        val graphModelOr: ResourceModel = DeriveResourceModelTasty.gen[Network | Transaction | Asset]
 
-        assertTrue(graphModelAnd == expectedModel("networkAndTransaction")) &&
-        assertTrue(graphModelOr == expectedModel("networkOrTransaction"))
+        assertTrue(graphModelAnd == expectedModel("networkAndTransactionAndAsset")) &&
+        assertTrue(graphModelOr == expectedModel("networkOrTransactionOrAsset"))
       }
     )

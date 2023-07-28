@@ -207,7 +207,7 @@ object ArangoResourceStore:
     ZLayer(
       for
         client <- ZIO.service[ArangoClientJson]
-        resourceModel = DeriveResourceModel.gen[R]
+        resourceModel = DeriveResourceModelTasty.gen[R]
         db <- initDb(client, resourceModel)
       yield new ArangoResourceStore(db, resourceModel)
     )
