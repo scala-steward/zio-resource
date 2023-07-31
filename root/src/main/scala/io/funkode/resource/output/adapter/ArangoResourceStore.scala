@@ -191,6 +191,7 @@ object ArangoResourceStore:
 
           val createCollections =
             collections.map(col => graph.addVertexCollection(col).ignoreConflict)
+            collections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
           val createRels = collections
             .map { sourceCollection =>
@@ -203,7 +204,7 @@ object ArangoResourceStore:
         .handleErrors(Urn("init", "db"))
     yield db
 
-  inline def derived: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
+  inline def derived[R]: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
     ZLayer(
       for
         client <- ZIO.service[ArangoClientJson]
