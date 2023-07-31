@@ -8,8 +8,6 @@ package io.funkode.resource
 package output
 package adapter
 
-import scala.deriving.Mirror
-
 import io.lemonlabs.uri.Urn
 import zio.*
 import zio.json.*
@@ -190,7 +188,6 @@ object ArangoResourceStore:
             .diff(existingVertices)
 
           val createCollections =
-            collections.map(col => graph.addVertexCollection(col).ignoreConflict)
             collections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
           val createRels = collections
