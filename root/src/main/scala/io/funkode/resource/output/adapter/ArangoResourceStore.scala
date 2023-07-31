@@ -203,7 +203,7 @@ object ArangoResourceStore:
         .handleErrors(Urn("init", "db"))
     yield db
 
-  inline def derived[R: Mirror.Of]: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
+  inline def derived: ZLayer[ArangoClientJson, ResourceError, ResourceStore] =
     ZLayer(
       for
         client <- ZIO.service[ArangoClientJson]
