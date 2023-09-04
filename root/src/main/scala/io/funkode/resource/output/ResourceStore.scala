@@ -48,10 +48,10 @@ trait ResourceStore:
   inline def fetchOneRel(urn: Urn, relType: String): ResourceApiCall[Resource] =
     fetchRel(urn, relType).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
 
-  inline def fetchRelAs[R: Resource.Addressable](urn: Urn, relType: String): ResourceStream[Resource.Of[R]] =
+  inline def fetchRelAs[R](urn: Urn, relType: String): ResourceStream[Resource.Of[R]] =
     fetchRel(urn, relType).map(_.of[R])
 
-  inline def fetchOneRelAs[R: Resource.Addressable](
+  inline def fetchOneRelAs[R](
       urn: Urn,
       relType: String
   ): ResourceApiCall[Resource.Of[R]] =
