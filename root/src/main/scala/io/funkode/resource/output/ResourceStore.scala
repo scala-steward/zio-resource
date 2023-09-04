@@ -40,7 +40,7 @@ trait ResourceStore:
   ): ResourceApiCall[Resource.Of[R]] =
     save(addressable.asJsonResource).map(_.of[R])
 
-  inline def save[R: Resource.Addressable](
+  inline def save[R](
       inline typedResource: Resource.Of[R]
   ): ResourceApiCall[Resource] =
     save(typedResource.asJsonResource)
@@ -85,7 +85,7 @@ object ResourceStore:
   ): WithResourceStore[Resource.Of[R]] =
     withStore(_.save(addressable))
 
-  inline def save[R: Resource.Addressable](
+  inline def save[R](
       inline typedResource: Resource.Of[R]
   ): WithResourceStore[Resource] =
     withStore(_.save(typedResource))

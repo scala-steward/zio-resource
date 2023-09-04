@@ -102,7 +102,7 @@ object Resource:
           Resource.Of[R](resource.urn, parsedBody, resource.etag, resource.links)
         case _ => error("Missing Decoder for type" + codeOf(erasedValue[R]))
 
-  extension [R: Resource.Addressable](inline typedResource: Resource.Of[R])
+  extension [R](inline typedResource: Resource.Of[R])
     inline def asJsonResource: Resource =
       val bodyStream = for
         bodyTypedStream <- ZStream.fromZIO(typedResource.body)
@@ -128,7 +128,7 @@ object Resource:
     extension (r: R)
       def urn: Urn = resourceUrn(r)
       def asResource: Resource.Of[R] = Resource.fromAddressableClass(r)(using self)
-      inline def asJsonResource: Resource = r.asResource.asJsonResource(using self)
+      inline def asJsonResource: Resource = r.asResource.asJsonResource
 
     given addressableToResource(using Resource.Addressable[R]): Conversion[R, Resource.Of[R]] =
       _.asResource
