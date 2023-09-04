@@ -29,10 +29,10 @@ trait ResourceStore:
   def fetchOne(urn: Urn): ResourceApiCall[Resource] =
     fetch(urn).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
 
-  inline def fetchAs[R: Resource.Addressable](urn: Urn): ResourceStream[Resource.Of[R]] =
+  inline def fetchAs[R](urn: Urn): ResourceStream[Resource.Of[R]] =
     fetch(urn).map(_.of[R])
 
-  inline def fetchOneAs[R: Resource.Addressable](urn: Urn): ResourceApiCall[Resource.Of[R]] =
+  inline def fetchOneAs[R](urn: Urn): ResourceApiCall[Resource.Of[R]] =
     fetchOne(urn).map(_.of[R])
 
   inline def save[R: Resource.Addressable](
