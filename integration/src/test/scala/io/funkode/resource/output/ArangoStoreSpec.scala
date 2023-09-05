@@ -5,6 +5,7 @@ import io.lemonlabs.uri.Urn
 import zio.*
 import zio.http.*
 import zio.json.*
+import zio.json.ast.Json
 import zio.stream.*
 import zio.test.*
 
@@ -73,7 +74,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
-          // fetchedNetworkJson <- ResourceStore.fetchOneAs[Json](ethNetworkUrn).body
+          fetchedNetworkJson <- ResourceStore.fetchOneAs[Json](ethNetworkUrn).body
           fetchedNetworkResource <- ResourceStore.fetchOneAs[Network](ethNetworkUrn)
           fetchedNetwork <- fetchedNetworkResource.body
           storedTxResource <- ResourceStore.save(tx1)
@@ -99,7 +100,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
             .runCollect
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
-          // assertTrue(fetchedNetworkJson.toJson == ethNetwornJsonString) &&
+          assertTrue(fetchedNetworkJson.toJson == ethNetwornJsonString) &&
           assertTrue(fetchedNetworkResource.etag.nonEmpty) &&
           assertTrue(storedTx == tx1) &&
           assertTrue(storedTx == fetchedTx) &&
