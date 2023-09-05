@@ -22,7 +22,7 @@ trait ResourceStore:
 
   def fetch(urn: Urn): ResourceStream[Resource]
   def save(resource: Resource): ResourceApiCall[Resource]
-  def delete(urn: Urn): ResourceApiCall[Unit]
+  def delete(urn: Urn): ResourceApiCall[Resource]
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
 
@@ -70,10 +70,10 @@ object ResourceStore:
 
   def fetchOne(urn: Urn): WithResourceStore[Resource] = withStore(_.fetchOne(urn))
 
-  inline def fetchAs[R: Addressable](urn: Urn): WithResourceStreamStore[Resource.Of[R]] = withStreamStore(
+  inline def fetchAs[R](urn: Urn): WithResourceStreamStore[Resource.Of[R]] = withStreamStore(
     _.fetchAs[R](urn)
   )
-  inline def fetchOneAs[R: Addressable](urn: Urn): WithResourceStore[Resource.Of[R]] = withStore(
+  inline def fetchOneAs[R](urn: Urn): WithResourceStore[Resource.Of[R]] = withStore(
     _.fetchOneAs[R](urn)
   )
 
@@ -105,7 +105,7 @@ object ResourceStore:
   ): WithResourceStore[Resource.Of[R]] =
     withStore(_.fetchOneRelAs[R](urn, relType))
 
-  def delete(urn: Urn): WithResourceStore[Unit] = withStore(_.delete(urn))
+  def delete(urn: Urn): WithResourceStore[Resource] = withStore(_.delete(urn))
 
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): WithResourceStore[Unit] =
     withStore(_.link(leftUrn, relType, rightUrn))
@@ -141,14 +141,13 @@ object ResourceStore:
     def save(resource: Resource): ResourceApiCall[Resource] =
       ZIO.fromOption(storeMap.put(resource.urn, resource)).orElse(ZIO.succeed(resource))
 
-    def delete(urn: Urn): ResourceApiCall[Unit] =
+    def delete(urn: Urn): ResourceApiCall[Resource] =
       ZIO.succeed {
         linksMap
           .mapValuesInPlace((_, rels) => rels.mapValuesInPlace((_, relRes) => relRes.filter(_.urn != urn)))
           .remove(urn)
       } *>
-        ZIO.fromOption(storeMap.remove(urn)).orElseFail(ResourceError.NotFoundError(urn)) *>
-        ZIO.succeed(())
+        ZIO.fromOption(storeMap.remove(urn)).orElseFail(ResourceError.NotFoundError(urn))
 
     def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
       for

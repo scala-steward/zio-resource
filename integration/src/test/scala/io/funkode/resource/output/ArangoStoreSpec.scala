@@ -36,14 +36,7 @@ trait TransactionsExamples:
   val ethNetwork = Network("eth", "1", "Ethereum Mainnet", "ETH")
   val bscNetwork = Network("bsc", "1", "B Chain Mainnet", "BNB")
   val ethNetwornJsonString =
-    """
-      |{
-      |  "id": "eth",
-      |  "chainId": "1",
-      |  "name": "Ethereum Mainnet",
-      |  "currency": "ETH"
-      |}
-      |""".stripMargin
+    """{"chainId":"1","currency":"ETH","name":"Ethereum Mainnet","id":"eth","transactions":[]}""".stripMargin
 
   val ethNetworkResource =
     Resource.fromJsonStream(ethNetworkUrn, ZStream.fromIterable(ethNetwornJsonString.getBytes))
@@ -80,6 +73,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
+          // fetchedNetworkJson <- ResourceStore.fetchOneAs[Json](ethNetworkUrn).body
           fetchedNetworkResource <- ResourceStore.fetchOneAs[Network](ethNetworkUrn)
           fetchedNetwork <- fetchedNetworkResource.body
           storedTxResource <- ResourceStore.save(tx1)
@@ -105,6 +99,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
             .runCollect
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
+          // assertTrue(fetchedNetworkJson.toJson == ethNetwornJsonString) &&
           assertTrue(fetchedNetworkResource.etag.nonEmpty) &&
           assertTrue(storedTx == tx1) &&
           assertTrue(storedTx == fetchedTx) &&

@@ -11,7 +11,7 @@ import io.lemonlabs.uri.Urn
 enum ResourceError(msg: String, cause: Option[Throwable] = None) extends Throwable(msg, cause.orNull):
   case NotFoundError(urn: Urn, cause: Option[Throwable] = None)
       extends ResourceError(
-        s"Resource with urn $urn not found, cause:  ${cause.map(_.getMessage).getOrElse("[empty cause]")}",
+        s"NotFoundError(urn: $urn, cause:  ${cause.map(_.getMessage).getOrElse("[empty cause]")}",
         cause
       )
   case SerializationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)

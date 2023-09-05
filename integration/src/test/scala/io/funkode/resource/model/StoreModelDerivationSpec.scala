@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-package io.funkode.resource
-package model
+package io.funkode.resource.model
 
 import zio.test.*
 

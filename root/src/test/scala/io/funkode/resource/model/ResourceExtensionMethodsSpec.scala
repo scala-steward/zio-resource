@@ -11,8 +11,6 @@ import zio.*
 import zio.json.*
 import zio.test.*
 
-import io.funkode.resource.model.StoreModelDerivationSpec.{suite, test}
-
 trait ResourceExamples:
   sealed trait Library
 

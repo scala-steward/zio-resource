@@ -17,7 +17,6 @@ import zio.stream.*
 import io.funkode.arangodb.http.*
 import io.funkode.arangodb.http.JsonCodecs.given
 import io.funkode.arangodb.model.*
-import io.funkode.arangodb.protocol.ArangoMessage.*
 import io.funkode.resource.model.*
 import io.funkode.velocypack.VPack.*
 
@@ -25,6 +24,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   import ArangoResourceStore.*
   import ArangoResourceStore.given
+
   implicit val jsonCodec: JsonCodec[Json] = JsonCodec[Json](Json.encoder, Json.decoder)
 
   val graph = db.graph(GraphName(resourceModel.name))
@@ -39,19 +39,18 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   def resourceModel: ResourceModel = storeModel
 
+  private def pureJsonPipeline(urn: Urn) = ZPipeline.fromFunction[Any, ResourceError, Byte, Resource]:
+    byteStream =>
+      val jsonFromStream = JsonDecoder[Json].decodeJsonStreamInput(byteStream).handleErrors(urn)
+      ZStream.fromZIO(jsonFromStream.map(_.asResource))
+
   def fetch(urn: Urn): ResourceStream[Resource] =
-    for
-      headers <- ZStream.fromZIO(db.document(urn).head().handleErrors(urn))
-      bodyStream = db
-        .document(urn)
-        .readRaw()
-        .handleStreamErrors(urn)
-      resourceEtag = headers match
-        case Header.Response(_, _, _, meta) =>
-          meta.get("Etag").map(Etag.apply)
-        case _ => None
-      resource <- ZStream.apply(Resource.fromJsonStream(urn, bodyStream, resourceEtag))
-    yield resource
+    db
+      .document(urn)
+      .readRaw()
+      .handleStreamErrors(urn)
+      .via(pureJsonPipeline(urn))
+      .orElseIfEmpty(ZStream.fail(ResourceError.NotFoundError(urn, None)))
 
   def save(resource: Resource): ResourceApiCall[Resource] =
     resource.format match
@@ -81,11 +80,11 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
             .map(_.asResource)
         yield savedResource
 
-  def delete(urn: Urn): ResourceApiCall[Unit] =
+  def delete(urn: Urn): ResourceApiCall[Resource] =
     for
-      _ <- fetchOne(urn)
+      deleted <- fetchOne(urn)
       _ <- graph.vertexDocument(urn).remove[Json]().handleErrors(urn)
-    yield ()
+    yield deleted
 
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
     val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
@@ -125,18 +124,26 @@ object ArangoResourceStore:
 
   def handleArangoErrors(urn: Urn, t: Throwable): ResourceError = t match
     case e @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(e))
-    case e                             => ResourceError.UnderlinedError(e)
+    case resourceError: ResourceError  => resourceError
+    case e =>
+      e.getCause match
+        case resourceError: ResourceError      => resourceError
+        case cause @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(cause))
+
+        case other =>
+          other.getCause match
+            case resourceError: ResourceError =>
+              resourceError
+            case _ =>
+              ResourceError.UnderlinedError(e)
 
   extension [R](io: IO[Throwable, R])
     def handleErrors(urn: Urn): ResourceApiCall[R] =
-      io.mapError(e => handleArangoErrors(urn, e))
+      io.mapError(handleArangoErrors(urn, _))
 
   extension [R](stream: Stream[Throwable, R])
     def handleStreamErrors(urn: Urn): ResourceStream[R] =
-      stream.catchAll(t =>
-        ZIO.logErrorCause(s"handleStreamErrors for urn $urn", Cause.fail(t))
-        ZStream.fail(handleArangoErrors(urn, t))
-      )
+      stream.mapError(handleArangoErrors(urn, _))
 
   extension (json: Json)
     def etag: Option[Etag] = json match
@@ -149,7 +156,7 @@ object ArangoResourceStore:
       case Json.Obj(fields) =>
         fields
           .filter(_._1 == VObject.IdKey)
-          .map(_._2.as[String].toOption.map(DocumentHandle.parse).flatten)
+          .map(_._2.as[String].toOption.flatMap(DocumentHandle.parse))
           .headOption
           .flatten
           .get // risky option but ArangoDB always retrieves _id
