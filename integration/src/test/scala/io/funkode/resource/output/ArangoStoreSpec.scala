@@ -27,12 +27,14 @@ trait TransactionsExamples:
 
   val hash1 = "0x888333"
   val hash2 = "0x999333"
+  val hash3 = "0x111555"
   val timestamp1 = 1L
   val timestamp2 = 2L
 
   val ethNetworkUrn = Urn.parse("urn:network:eth")
   val tx1Urn = Urn.parse("urn:tx:" + hash1 + "@" + ethNetworkUrn.nss)
   val tx2Urn = Urn.parse("urn:tx:" + hash2 + "@" + ethNetworkUrn.nss)
+  val txWithNextUrn = Urn.parse("urn:tx:" + hash3 + "@" + ethNetworkUrn.nss)
 
   val ethNetwork = Network("eth", "1", "Ethereum Mainnet", "ETH")
   val bscNetwork = Network("bsc", "1", "B Chain Mainnet", "BNB")
@@ -46,7 +48,7 @@ trait TransactionsExamples:
     s"""
        |{
        |  "network": $ethNetwornJsonString,
-       |  "hash": "0x888333",
+       |  "hash": "$hash1",
        |  "timestamp": 1
        |}
        |""".stripMargin
@@ -55,13 +57,29 @@ trait TransactionsExamples:
     s"""
        |{
        |  "network": $ethNetwornJsonString,
-       |  "hash": "0x999333",
+       |  "hash": "$hash2",
        |  "timestamp": 2
+       |}
+       |""".stripMargin
+
+  val txWithNextString =
+    s"""
+       |{
+       |  "network": $ethNetwornJsonString,
+       |  "hash": "$hash3",
+       |  "timestamp": 1,
+       |  "next": {
+       |      "network": $ethNetwornJsonString,
+       |      "hash": "$hash2",
+       |      "timestamp": 2
+       |    }
+       |  }
        |}
        |""".stripMargin
 
   val tx1 = Transaction(ethNetwork.urn, hash1, timestamp1)
   val tx2 = Transaction(ethNetwork.urn, hash2, timestamp2)
+  val txWithNext = Transaction(ethNetwork.urn, hash3, timestamp1, Some(tx1))
   val tx1Resource = Resource.fromJsonStream(tx1Urn, ZStream.fromIterable(tx1JsonString.getBytes()))
   val tx2Resource = Resource.fromJsonStream(tx2Urn, ZStream.fromIterable(tx2JsonString.getBytes()))
 
@@ -70,7 +88,6 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(
       test("Store network, transaction and link them") {
-
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
@@ -138,7 +155,9 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
             .flip
         yield assertTrue(error match
           case ResourceError.NotFoundError(urn, _) => urn == fakeUrn
-          case _                                   => false
+          case e =>
+            println(s"Expected NotFoundError, found ${e.getCause}, cause: ${e.getCause}")
+            false
         )
       },
       test("Manage not found error in (fetchOne) typed resource") {
@@ -163,6 +182,26 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           case _: ResourceError.SerializationError => true
           case _                                   => false
         )
+      },
+      test("Store a transaction with nested document") {
+        for
+          error <- ResourceStore.fetchOne(txWithNextUrn).flip
+          errorAs <- ResourceStore.fetchOneAs[Transaction](txWithNextUrn).flip
+          storedTxResource <- ResourceStore.save(txWithNext)
+          fetchedResource <- ResourceStore.fetchOneAs[Transaction](txWithNextUrn)
+          storedTx <- storedTxResource.body
+          fetchedTx <- fetchedResource.body
+        yield assertTrue(error match
+          case ResourceError.NotFoundError(urn, _) => urn == txWithNextUrn
+          case _                                   => false
+        ) && assertTrue(errorAs match
+          case ResourceError.NotFoundError(urn, _) => urn == txWithNextUrn
+          case _                                   => false
+        ) &&
+          assertTrue(storedTxResource.urn == txWithNextUrn) &&
+          assertTrue(storedTx == txWithNext) &&
+          assertTrue(fetchedResource.urn == storedTxResource.urn) &&
+          assertTrue(storedTx == fetchedTx)
       }
     ).provideShared(
       ArangoConfiguration.default,

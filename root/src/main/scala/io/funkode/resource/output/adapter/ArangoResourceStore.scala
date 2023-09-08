@@ -41,8 +41,10 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   private def pureJsonPipeline(urn: Urn) = ZPipeline.fromFunction[Any, ResourceError, Byte, Resource]:
     byteStream =>
-      val jsonFromStream = JsonDecoder[Json].decodeJsonStreamInput(byteStream).handleErrors(urn)
-      ZStream.fromZIO(jsonFromStream.map(_.asResource))
+      if byteStream == null then ZStream.fail(ResourceError.NotFoundError(urn))
+      else
+        val jsonFromStream = JsonDecoder[Json].decodeJsonStreamInput(byteStream).handleErrors(urn)
+        ZStream.fromZIO(jsonFromStream.map(_.asResource))
 
   def fetch(urn: Urn): ResourceStream[Resource] =
     db
