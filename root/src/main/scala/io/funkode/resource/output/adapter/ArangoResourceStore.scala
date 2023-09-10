@@ -125,19 +125,23 @@ object ArangoResourceStore:
     Urn.parse(s"urn:${docHandle.collection.unwrap}:${docHandle.key.unwrap}")
 
   def handleArangoErrors(urn: Urn, t: Throwable): ResourceError = t match
-    case e @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(e))
-    case resourceError: ResourceError  => resourceError
-    case e =>
-      e.getCause match
-        case resourceError: ResourceError      => resourceError
-        case cause @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(cause))
-
-        case other =>
-          other.getCause match
-            case resourceError: ResourceError =>
-              resourceError
-            case _ =>
-              ResourceError.UnderlinedError(e)
+    case notFoundError @ ArangoError(404, _, _, _) => ResourceError.NotFoundError(urn, Some(notFoundError))
+    case resourceError: ResourceError              => resourceError
+    case otherError =>
+      if otherError != null then
+        otherError.getCause match
+          case causeNotFound @ ArangoError(404, _, _, _) =>
+            ResourceError.NotFoundError(urn, Some(causeNotFound))
+          case causeResourceError: ResourceError => causeResourceError
+          case other =>
+            if other != null then
+              other.getCause match
+                case resourceError: ResourceError =>
+                  resourceError
+                case _ =>
+                  ResourceError.UnderlinedError(otherError)
+            else ResourceError.UnderlinedError(otherError)
+      else ResourceError.UnderlinedError(otherError)
 
   extension [R](io: IO[Throwable, R])
     def handleErrors(urn: Urn): ResourceApiCall[R] =
