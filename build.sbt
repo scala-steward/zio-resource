@@ -9,7 +9,7 @@ inThisBuild(
   Seq(
     resolvers ++= Resolver.sonatypeOssRepos("releases"),
     organization := "io.funkode",
-    scalaVersion := "3.3.0",
+    scalaVersion := "3.3.1",
     versionScheme := Some("early-semver"),
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
@@ -59,7 +59,7 @@ ThisBuild / scalacOptions ++=
   ) ++ Seq("-rewrite", "-indent") ++ Seq("-source", "future-migration")
 
 lazy val commonLibs = Seq(scalaUri, logBack, zioConfMagnolia, zioConfTypesafe)
-lazy val zioLibs = Seq(zio, zioHttp, zioJson, zioConcurrent, zioConfMagnolia, zioConfTypesafe)
+//lazy val zioLibs = Seq(zio, zioHttp, zioJson, zioConcurrent, zioConfMagnolia, zioConfTypesafe)
 lazy val testLibs = Seq(zioTest, zioTestSbt, zioJGolden).map(_ % "test")
 
 lazy val root =
