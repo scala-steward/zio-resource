@@ -25,6 +25,7 @@ trait ResourceStore:
   def delete(urn: Urn): ResourceApiCall[Resource]
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
+  def transaction[R](body: ResourceStore => ResourceApiCall[R]): ResourceApiCall[R]
 
   def fetchOne(urn: Urn): ResourceApiCall[Resource] =
     fetch(urn).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
@@ -99,6 +100,12 @@ object ResourceStore:
   ): WithResourceStreamStore[Resource.Of[R]] =
     withStreamStore(_.fetchRelAs[R](urn, relType))
 
+  inline def transaction[R](body: ResourceStore => ResourceApiCall[R]): WithResourceStore[R] =
+    for
+      service <- ZIO.service[ResourceStore]
+      result <- service.transaction(body)
+    yield result
+
   inline def fetchOneRelAs[R: Resource.Addressable](
       urn: Urn,
       relType: String
@@ -129,8 +136,8 @@ object ResourceStore:
 
   trait InMemoryStore extends ResourceStore:
 
-    private val storeMap: collection.mutable.Map[Urn, Resource] = collection.mutable.Map.empty
-    private val linksMap: collection.mutable.Map[Urn, collection.mutable.Map[String, Chunk[Resource]]] =
+    private var storeMap: collection.mutable.Map[Urn, Resource] = collection.mutable.Map.empty
+    private var linksMap: collection.mutable.Map[Urn, collection.mutable.Map[String, Chunk[Resource]]] =
       collection.mutable.Map.empty
 
     def resourceModel: ResourceModel = ResourceModel("in-mem", Map.empty)
@@ -172,5 +179,19 @@ object ResourceStore:
             ResourceError
               .NotFoundError(urn, Some(new Throwable(s"Rel type $relType not found for urn: $urn")))
           )
+
+        // unsafe implementation only used for testing
+    def transaction[R](
+        body: ResourceStore => io.funkode.resource.output.ResourceApiCall[R]
+    ): ResourceApiCall[R] =
+      val savedStoreMap = storeMap.clone
+      val savedLinksMap = linksMap.clone
+
+      body(this).catchAll(e =>
+        ZIO.succeed {
+          this.storeMap = savedStoreMap
+          this.linksMap = savedLinksMap
+        } *> ZIO.fail(e)
+      )
 
   def inMemory: ZLayer[Any, ResourceError, ResourceStore] = ZLayer(ZIO.succeed(new InMemoryStore {}))

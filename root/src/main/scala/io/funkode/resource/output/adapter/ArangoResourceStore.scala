@@ -20,6 +20,25 @@ import io.funkode.arangodb.model.*
 import io.funkode.resource.model.*
 import io.funkode.velocypack.VPack.*
 
+class InTransaction(store: ArangoResourceStore, transactionId: TransactionId) extends ResourceStore:
+
+  def resourceModel: ResourceModel = store.resourceModel
+
+  def fetch(urn: Urn): ResourceStream[Resource] = store.fetchWithTx(urn)(Some(transactionId))
+
+  def save(resource: Resource): ResourceApiCall[Resource] = store.saveWithTx(resource)(Some(transactionId))
+
+  def delete(urn: Urn): ResourceApiCall[Resource] = store.deleteWithTx(urn)(Some(transactionId))
+
+  def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    store.linkWithTx(leftUrn, relType, rightUrn)(Some(transactionId))
+
+  def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =
+    store.fetchRelWithTx(urn, relType)(Some(transactionId))
+
+  def transaction[R](body: ResourceStore => ResourceApiCall[R]): ResourceApiCall[R] =
+    throw new UnsupportedOperationException("we can't nest transactions")
+
 class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) extends ResourceStore:
 
   import ArangoResourceStore.*
@@ -46,15 +65,18 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
         val jsonFromStream = JsonDecoder[Json].decodeJsonStreamInput(byteStream).handleErrors(urn)
         ZStream.fromZIO(jsonFromStream.map(_.asResource))
 
-  def fetch(urn: Urn): ResourceStream[Resource] =
+  def fetchWithTx(urn: Urn)(transaction: Option[TransactionId]): ResourceStream[Resource] =
     db
       .document(urn)
-      .readRaw()
+      .readRaw(transaction = transaction)
       .handleStreamErrors(urn)
       .via(pureJsonPipeline(urn))
       .orElseIfEmpty(ZStream.fail(ResourceError.NotFoundError(urn, None)))
 
-  def save(resource: Resource): ResourceApiCall[Resource] =
+  def fetch(urn: Urn): ResourceStream[Resource] =
+    fetchWithTx(urn)(None)
+
+  def saveWithTx(resource: Resource)(transaction: Option[TransactionId]): ResourceApiCall[Resource] =
     resource.format match
       case ResourceFormat.Json =>
         val urn = resource.urn
@@ -72,7 +94,7 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
               ZIO.fail(ResourceError.FormatError(s"only supported to store json objects, received $other"))
           savedResource <- db
             .document(urn)
-            .upsert(vobject)
+            .upsert(vobject, transaction)
             .handleErrors(urn)
             .flatMap(vpack =>
               ZIO
@@ -82,32 +104,65 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
             .map(_.asResource)
         yield savedResource
 
-  def delete(urn: Urn): ResourceApiCall[Resource] =
+  def save(resource: Resource): ResourceApiCall[Resource] =
+    saveWithTx(resource)(None)
+
+  def deleteWithTx(urn: Urn)(transaction: Option[TransactionId]): ResourceApiCall[Resource] =
     for
-      deleted <- fetchOne(urn)
-      _ <- graph.vertexDocument(urn).remove[Json]().handleErrors(urn)
+      deleted <- fetchWithTx(urn)(transaction).runHead.someOrFail(ResourceError.NotFoundError(urn, None))
+      _ <- graph.vertexDocument(urn).remove[Json](transaction = transaction).handleErrors(urn)
     yield deleted
 
-  def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
+  def delete(urn: Urn): ResourceApiCall[Resource] =
+    deleteWithTx(urn)(None)
+
+  def linkWithTx(leftUrn: Urn, rel: String, rightUrn: Urn)(
+      transaction: Option[TransactionId]
+  ): ResourceApiCall[Unit] =
     val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
     db.collection(relCollection(leftUrn))
       .documents
-      .insert(Rel(rel, leftUrn, rightUrn, linkKey))
+      .insert(document = Rel(rel, leftUrn, rightUrn, linkKey), transaction = transaction)
       .ignoreConflict
       .handleErrors(Urn.apply("rels", linkKey.unwrap))
       .map(_ => ())
 
-  def fetchRel(urn: Urn, relType: String): Stream[ResourceError, Resource] =
-    db
+  def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    linkWithTx(leftUrn, rel, rightUrn)(None)
+
+  def fetchRelWithTx(urn: Urn, relType: String)(
+      transaction: Option[TransactionId]
+  ): Stream[ResourceError, Resource] =
+    val query = db
       .query(
         Query("FOR v, e IN OUTBOUND @startVertex @@edge FILTER e._rel == @relType RETURN v")
           .bindVar("startVertex", VString(fromUrnToDocHandle(urn).unwrap))
           .bindVar("@edge", VString(relCollection(urn).unwrap))
           .bindVar("relType", VString(relType))
       )
+    val queryWithTx = transaction.map(t => query.transaction(t)).getOrElse(query)
+
+    queryWithTx
       .stream[Json]
       .map(json => json.asResource)
       .handleStreamErrors(urn)
+
+  def fetchRel(urn: Urn, relType: String): Stream[ResourceError, Resource] =
+    fetchRelWithTx(urn, relType)(None)
+
+  def transaction[R](
+      body: ResourceStore => io.funkode.resource.output.ResourceApiCall[R]
+  ): ResourceApiCall[R] =
+    for
+      tx <- db.transactions
+        .begin(write = resourceModel.allCollectionNames, waitForSync = true)
+        .handleErrors(Urn("not", "applyTx"))
+      storeWithTx = InTransaction(this, tx.id)
+      result <- body(storeWithTx).catchAll(e =>
+        tx.abort.handleErrors((Urn("not", "applyAbort"))) *> ZIO.fail(e)
+      )
+      _ <- tx.commit.handleErrors(Urn("not", "applyCommit"))
+    yield result
 
 object ArangoResourceStore:
 
@@ -184,6 +239,19 @@ object ArangoResourceStore:
       .map(_ => ())
       .ifConflict(ZIO.succeed(()))
 
+  extension (collectionName: CollectionName)
+    def relsCollectionName: CollectionName = CollectionName(collectionName.unwrap + "-rels")
+    def graphEdgeDefinition(collections: List[CollectionName]): GraphEdgeDefinition =
+      GraphEdgeDefinition(collectionName.relsCollectionName, List(collectionName), collections)
+
+  extension (resourceModel: ResourceModel)
+    def collectionNames = resourceModel.collections
+      .map(_._1)
+      .map(CollectionName.apply)
+      .toList
+    def relCollectionNames = resourceModel.collectionNames.map(_.relsCollectionName)
+    def allCollectionNames = resourceModel.collectionNames ++ resourceModel.relCollectionNames
+
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))
     val graph = db.graph(GraphName(resourceModel.name))
@@ -194,20 +262,15 @@ object ArangoResourceStore:
       existingEdges <- graph.edgeCollections.handleErrors(Urn("init", "db"))
       _ <- ZIO
         .collectAll:
-          val collections = resourceModel.collections
-            .map(_._1)
-            .map(CollectionName.apply)
-            .toList
-            .diff(existingVertices)
+          val collectionNames = resourceModel.collectionNames
+          val pendingCollections = collectionNames.diff(existingVertices)
 
           val createCollections =
-            collections.map(col => graph.addVertexCollection(col).ignoreConflict)
+            pendingCollections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
-          val createRels = collections
-            .map { sourceCollection =>
-              val edgeName = CollectionName(sourceCollection.unwrap + "-rels")
-              GraphEdgeDefinition(edgeName, List(sourceCollection), collections)
-            }
+          val createRels = collectionNames
+            .map(_.graphEdgeDefinition(collectionNames))
+            .diff(existingEdges)
             .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
           createCollections ++ createRels

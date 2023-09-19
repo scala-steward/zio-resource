@@ -38,6 +38,10 @@ trait TransactionsExamples:
 
   val ethNetwork = Network("eth", "1", "Ethereum Mainnet", "ETH")
   val bscNetwork = Network("bsc", "1", "B Chain Mainnet", "BNB")
+  val binanceNetwork = Network("binance", "1", "Binance CEX", "BNB")
+  val kucoinNetwork = Network("kucoin", "1", "Kucoin CEX", "KCS")
+  val kcsNetwork = Network("kcs", "1", "Kucoin Mainnet", "KCS")
+
   val ethNetwornJsonString =
     """{"chainId":"1","currency":"ETH","name":"Ethereum Mainnet","id":"eth","transactions":[]}""".stripMargin
 
@@ -125,6 +129,39 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           assertTrue(transactionNetwork == ethNetwork) &&
           assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2)) &&
           assertTrue(netWorkTransactionsAfterDelete == Chunk(tx2))
+      },
+      test("Store inside transaction and commit") {
+        for
+          _ <- ResourceStore.transaction { store =>
+            for
+              _ <- store.save(kucoinNetwork)
+              _ <- store.save(kcsNetwork)
+              _ <- store.link(kucoinNetwork.urn, "communityChain", kcsNetwork.urn)
+            yield ()
+          }
+          successfullResult <- ResourceStore.fetchOneRelAs[Network](kucoinNetwork.urn, "communityChain").body
+          error <- ResourceStore.transaction { store =>
+            for
+              _ <- store.save(binanceNetwork)
+              _ <- store.link(kcsNetwork.urn, "cexChain", kucoinNetwork.urn)
+              _ <- store.fetchOne(Urn("not", "exists"))
+            yield ()
+          }.flip
+          notFoundSave <- ResourceStore.fetchOneAs[Network](binanceNetwork.urn).flip
+          notFoundRel <- ResourceStore.fetchOneRelAs[Network](kcsNetwork.urn, "cexChain").flip
+        yield assertTrue(successfullResult == kcsNetwork) &&
+          assertTrue(error match
+            case _: ResourceError.NotFoundError => true
+            case _                              => false
+          ) &&
+          assertTrue(notFoundSave match
+            case ResourceError.NotFoundError(urn, _) => urn == binanceNetwork.urn
+            case _                                   => false
+          ) &&
+          assertTrue(notFoundRel match
+            case ResourceError.NotFoundError(urn, _) => urn == kcsNetwork.urn
+            case _                                   => false
+          )
       },
       test("Manage not found error in raw resource") {
         val fakeUrn = Urn.parse("urn:network:doesnt:exist")
