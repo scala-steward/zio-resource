@@ -273,7 +273,12 @@ object ArangoResourceStore:
             .diff(existingEdges)
             .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
-          createCollections ++ createRels
+          val updateRels = collectionNames
+            .map(_.graphEdgeDefinition(collectionNames))
+            .intersect(existingEdges)
+            .map(edge => graph.replaceEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
+
+          createCollections ++ createRels ++ updateRels
         .handleErrors(Urn("init", "db"))
     yield db
 
