@@ -228,6 +228,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           fetchedResource <- ResourceStore.fetchOneAs[Transaction](txWithNextUrn)
           storedTx <- storedTxResource.body
           fetchedTx <- fetchedResource.body
+          deletedTx <- ResourceStore.delete(txWithNextUrn).map(_.of[Transaction]).body
         yield assertTrue(error match
           case ResourceError.NotFoundError(urn, _) => urn == txWithNextUrn
           case _                                   => false
@@ -238,7 +239,8 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           assertTrue(storedTxResource.urn == txWithNextUrn) &&
           assertTrue(storedTx == txWithNext) &&
           assertTrue(fetchedResource.urn == storedTxResource.urn) &&
-          assertTrue(storedTx == fetchedTx)
+          assertTrue(storedTx == fetchedTx) &&
+          assertTrue(storedTx == deletedTx)
       }
     ).provideShared(
       ArangoConfiguration.default,

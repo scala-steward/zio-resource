@@ -240,45 +240,58 @@ object ArangoResourceStore:
       .ifConflict(ZIO.succeed(()))
 
   extension (collectionName: CollectionName)
-    def relsCollectionName: CollectionName = CollectionName(collectionName.unwrap + "-rels")
+    def toRelName: CollectionName =
+      val unwrapped = collectionName.unwrap
+      if unwrapped.contains("-rels") then collectionName else CollectionName(unwrapped + "-rels")
     def graphEdgeDefinition(collections: List[CollectionName]): GraphEdgeDefinition =
-      GraphEdgeDefinition(collectionName.relsCollectionName, List(collectionName), collections)
+      GraphEdgeDefinition(collectionName.toRelName, List(collectionName), collections)
 
   extension (resourceModel: ResourceModel)
     def collectionNames = resourceModel.collections
       .map(_._1)
       .map(CollectionName.apply)
       .toList
-    def relCollectionNames = resourceModel.collectionNames.map(_.relsCollectionName)
+    def relCollectionNames = resourceModel.collectionNames.map(_.toRelName)
     def allCollectionNames = resourceModel.collectionNames ++ resourceModel.relCollectionNames
 
   def initDb(arango: ArangoClientJson, resourceModel: ResourceModel): ResourceApiCall[ArangoDatabaseJson] =
     val db = arango.database(DatabaseName(resourceModel.name))
     val graph = db.graph(GraphName(resourceModel.name))
     for
+      _ <- ZIO.logInfo(s"Creating database (if not exist) ${db.name}")
       _ <- db.createIfNotExist().handleErrors(Urn("init", "db"))
+      _ <- ZIO.logInfo(s"Creating graph (if not exist) ${graph.name}")
       _ <- graph.create().ignoreConflict.handleErrors(Urn("init", "db"))
       existingVertices <- graph.vertexCollections.handleErrors(Urn("init", "db"))
+      _ <- ZIO.logInfo(s"""Existing vertices ${existingVertices.mkString(", ")}""")
       existingEdges <- graph.edgeCollections.handleErrors(Urn("init", "db"))
+      _ <- ZIO.logInfo(s"""Existing edges ${existingEdges.mkString(", ")}""")
       _ <- ZIO
         .collectAll:
           val collectionNames = resourceModel.collectionNames
+          val collectionEdgeNames = collectionNames.map(_.toRelName)
           val pendingCollections = collectionNames.diff(existingVertices)
+          val toBeUpdatedEdges = collectionEdgeNames.intersect(existingEdges)
+          val newEdges = collectionEdgeNames.diff(existingEdges)
 
           val createCollections =
             pendingCollections.map(col => graph.addVertexCollection(col).ignoreConflict)
 
-          val createRels = collectionNames
+          val createRels = newEdges
             .map(_.graphEdgeDefinition(collectionNames))
-            .diff(existingEdges)
             .map(edge => graph.addEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
-          val updateRels = collectionNames
+          val updateRels = toBeUpdatedEdges
             .map(_.graphEdgeDefinition(collectionNames))
-            .intersect(existingEdges)
             .map(edge => graph.replaceEdgeCollection(edge.collection, edge.from, edge.to).ignoreConflict)
 
-          createCollections ++ createRels ++ updateRels
+          ZIO.logInfo(s"""Collections to be created:
+               |collectionNames: ${collectionNames.map(_.unwrap).mkString(", ")}
+               |existingEdges: ${existingEdges.map(_.unwrap).mkString(", ")}
+               |pendingCollections = ${pendingCollections.map(_.unwrap).mkString(", ")}
+               |newEdges = ${newEdges.map(_.unwrap).mkString(", ")}
+               |toBeUpdatedEdges = ${toBeUpdatedEdges.map(_.unwrap).mkString(", ")}
+               |""".stripMargin) +: (createCollections ++ createRels ++ updateRels)
         .handleErrors(Urn("init", "db"))
     yield db
 
