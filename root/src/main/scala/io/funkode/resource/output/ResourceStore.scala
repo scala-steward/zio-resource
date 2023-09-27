@@ -24,6 +24,7 @@ trait ResourceStore:
   def save(resource: Resource): ResourceApiCall[Resource]
   def delete(urn: Urn): ResourceApiCall[Resource]
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
+  def unlink(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit]
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource]
   def transaction[R](body: ResourceStore => ResourceApiCall[R]): ResourceApiCall[R]
 
@@ -117,6 +118,9 @@ object ResourceStore:
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): WithResourceStore[Unit] =
     withStore(_.link(leftUrn, relType, rightUrn))
 
+  def unlink(leftUrn: Urn, relType: String, rightUrn: Urn): WithResourceStore[Unit] =
+    withStore(_.unlink(leftUrn, relType, rightUrn))
+
   def fetchRel(urn: Urn, relType: String): WithResourceStreamStore[Resource] =
     withStreamStore(_.fetchRel(urn, relType))
 
@@ -163,12 +167,26 @@ object ResourceStore:
           ZIO
             .fromOption(storeMap.get(rightUrn))
             .orElseFail(ResourceError.NotFoundError(rightUrn))
-
         _ <-
           ZIO.succeed:
             val relatedMap = linksMap.getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
             val existingLinks = relatedMap.getOrElseUpdate(relType, Chunk.empty)
             relatedMap.put(relType, existingLinks :+ rightResource)
+      yield ()
+
+    def unlink(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
+      for
+        _ <- ZIO.fromOption(storeMap.get(leftUrn)).orElseFail(ResourceError.NotFoundError(leftUrn))
+        rightResource <-
+          ZIO
+            .fromOption(storeMap.get(rightUrn))
+            .orElseFail(ResourceError.NotFoundError(rightUrn))
+
+        _ <-
+          ZIO.succeed:
+            val relatedMap = linksMap.getOrElseUpdate(leftUrn, collection.mutable.Map.empty)
+            val existingLinks = relatedMap.getOrElseUpdate(relType, Chunk.empty)
+            relatedMap.put(relType, existingLinks.diff(Chunk(rightResource)))
       yield ()
 
     def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =

@@ -33,6 +33,9 @@ class InTransaction(store: ArangoResourceStore, transactionId: TransactionId) ex
   def link(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
     store.linkWithTx(leftUrn, relType, rightUrn)(Some(transactionId))
 
+  def unlink(leftUrn: Urn, relType: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    store.linkWithTx(leftUrn, relType, rightUrn)(Some(transactionId))
+
   def fetchRel(urn: Urn, relType: String): ResourceStream[Resource] =
     store.fetchRelWithTx(urn, relType)(Some(transactionId))
 
@@ -129,6 +132,21 @@ class ArangoResourceStore(db: ArangoDatabaseJson, storeModel: ResourceModel) ext
 
   def link(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
     linkWithTx(leftUrn, rel, rightUrn)(None)
+
+  def unlinkWithTx(leftUrn: Urn, rel: String, rightUrn: Urn)(
+      transaction: Option[TransactionId]
+  ): ResourceApiCall[Unit] =
+    val linkKey = generateLinkKey(leftUrn, rel, rightUrn)
+    val relHandle = DocumentHandle(relCollection(leftUrn), linkKey)
+
+    graph
+      .edgeInstance(relHandle)
+      .remove[Json](returnOld = true, transaction = transaction)
+      .handleErrors(Urn.apply("rels", linkKey.unwrap))
+      .map(_ => ())
+
+  def unlink(leftUrn: Urn, rel: String, rightUrn: Urn): ResourceApiCall[Unit] =
+    unlinkWithTx(leftUrn, rel, rightUrn)(None)
 
   def fetchRelWithTx(urn: Urn, relType: String)(
       transaction: Option[TransactionId]

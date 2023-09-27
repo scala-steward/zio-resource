@@ -91,7 +91,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(
-      test("Store network, transaction and link them") {
+      test("Store network, transaction and link/unlink them") {
         for
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
@@ -119,6 +119,9 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
             .fetchRelAs[Transaction](ethNetwork.urn, "transactions")
             .mapZIO(_.body)
             .runCollect
+          _ <- ResourceStore.unlink(tx2.urn, "network", ethNetwork.urn)
+          ethNetworkAfterUnlink <- ResourceStore.fetchOne(ethNetwork.urn)
+          errorAfterUnlink <- ResourceStore.fetchOneRelAs[Network](tx2.urn, "network").flip
         yield assertTrue(storedNetwork == ethNetwork) &&
           assertTrue(storedNetwork == fetchedNetwork) &&
           assertTrue(fetchedNetworkJson.toJson == ethNetwornJsonString) &&
@@ -128,7 +131,9 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           assertTrue(transactionNetworkResource.urn == ethNetworkUrn) &&
           assertTrue(transactionNetwork == ethNetwork) &&
           assertTrue(networkTransactions.sortBy(_.timestamp) == Chunk(tx1, tx2)) &&
-          assertTrue(netWorkTransactionsAfterDelete == Chunk(tx2))
+          assertTrue(netWorkTransactionsAfterDelete == Chunk(tx2)) &&
+          assertTrue(ethNetworkAfterUnlink == ethNetworkAfterUnlink) &&
+          assertTrue(errorAfterUnlink == ResourceError.NotFoundError(tx2.urn))
       },
       test("Store inside transaction and commit") {
         for

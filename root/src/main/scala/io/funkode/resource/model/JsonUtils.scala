@@ -101,7 +101,7 @@ object JsonUtils:
             println(s"Error with streaming ${trace.length}")
             trace.foreach(println)
             t.printStackTrace()
-            ZIO.fail(ResourceError.NormalizationError("Error reading stream", Some(t)))
+            ZIO.fail(ResourceError.SerializationError("Error reading stream", Some(t)))
           }
 
   @tailrec

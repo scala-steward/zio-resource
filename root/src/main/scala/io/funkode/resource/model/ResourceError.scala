@@ -15,9 +15,7 @@ enum ResourceError(msg: String, cause: Option[Throwable] = None) extends Throwab
         cause
       )
   case SerializationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
-  case NormalizationError(msg: String, cause: Option[Throwable] = None) extends ResourceError(msg, cause)
   case FormatError(msg: String, cause: Option[Throwable] = None)
       extends ResourceError(s"Format not supported: $msg", cause)
-  case ConflictError(urn: Urn) extends ResourceError(s"Resource with $urn already exist")
   case UnderlinedError(cause: Throwable)
       extends ResourceError(s"Non controlled error, cause: ${cause.getMessage}", Some(cause))

@@ -68,6 +68,20 @@ object InMemoryStoreSpec extends ZIOSpecDefault with CarsAndOwners:
           assertTrue(ownedCars2 == Chunk(carMercedes, carFord)) &&
           assertTrue(ownedCars3 == Chunk(carFord))
       },
+      test("Unlink resources") {
+        for
+          storedCar1 <- ResourceStore.save(Resource.fromAddressableClass(carMercedes))
+          storedOwner <- ResourceStore.save(Resource.fromAddressableClass(ownerRoger))
+          _ <- ResourceStore.link(storedOwner.urn, "owns", storedCar1.urn)
+          ownedCars1 <- ResourceStore.fetchOneRelAs[Car](storedOwner.urn, "owns").body
+          _ <- ResourceStore.unlink(storedOwner.urn, "owns", storedCar1.urn)
+          errorAfterUnlink <- ResourceStore.fetchOneRelAs[Car](storedOwner.urn, "owns").flip
+          fetchedCarAfterUnlink <- ResourceStore.fetchOneAs[Car](storedCar1.urn).body
+        yield assertTrue(ownedCars1 == carMercedes) &&
+          assertTrue(errorAfterUnlink == ResourceError.NotFoundError(storedOwner.urn)) &&
+          assertTrue(fetchedCarAfterUnlink == carMercedes)
+
+      },
       test("Call effect if not found") {
         for
           carIfNotFound <- ResourceStore
