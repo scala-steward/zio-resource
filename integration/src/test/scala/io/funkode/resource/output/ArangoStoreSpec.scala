@@ -112,12 +112,12 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
             .fetchRelAs[Transaction](ethNetwork.urn, "transactions")
             .mapZIO(_.body)
             .runCollect
-          transactionNetworkResource <- ResourceStore.fetchOneRelAs[Network](tx1.urn, "network")
-          transactionNetwork <- transactionNetworkResource.body
+          transactionNetworkResource <- ResourceStore.fetchOneRelAndConsume[Network](tx1.urn, "network")
+          transactionNetwork = transactionNetworkResource.body
           _ <- ResourceStore.delete(tx1.urn)
           netWorkTransactionsAfterDelete <- ResourceStore
-            .fetchRelAs[Transaction](ethNetwork.urn, "transactions")
-            .mapZIO(_.body)
+            .fetchRelAndConsume[Transaction](ethNetwork.urn, "transactions")
+            .map(_.body)
             .runCollect
           _ <- ResourceStore.unlink(tx2.urn, "network", ethNetwork.urn)
           ethNetworkAfterUnlink <- ResourceStore.fetchOne(ethNetwork.urn)
@@ -230,9 +230,9 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           error <- ResourceStore.fetchOne(txWithNextUrn).flip
           errorAs <- ResourceStore.fetchOneAs[Transaction](txWithNextUrn).flip
           storedTxResource <- ResourceStore.save(txWithNext)
-          fetchedResource <- ResourceStore.fetchOneAs[Transaction](txWithNextUrn)
+          fetchedAndConsumedResource <- ResourceStore.fetchOneAndConsume[Transaction](txWithNextUrn)
           storedTx <- storedTxResource.body
-          fetchedTx <- fetchedResource.body
+          fetchedTx = fetchedAndConsumedResource.body
           deletedTx <- ResourceStore.delete(txWithNextUrn).map(_.of[Transaction]).body
         yield assertTrue(error match
           case ResourceError.NotFoundError(urn, _) => urn == txWithNextUrn
@@ -243,7 +243,7 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
         ) &&
           assertTrue(storedTxResource.urn == txWithNextUrn) &&
           assertTrue(storedTx == txWithNext) &&
-          assertTrue(fetchedResource.urn == storedTxResource.urn) &&
+          assertTrue(fetchedAndConsumedResource.urn == storedTxResource.urn) &&
           assertTrue(storedTx == fetchedTx) &&
           assertTrue(storedTx == deletedTx)
       }

@@ -34,8 +34,14 @@ trait ResourceStore:
   inline def fetchAs[R](urn: Urn): ResourceStream[Resource.Of[R]] =
     fetch(urn).map(_.of[R])
 
+  inline def fetchAndConsume[R](urn: Urn): ResourceStream[Resource.InMemory[R]] =
+    fetch(urn).mapZIO(_.of[R].consume)
+
   inline def fetchOneAs[R](urn: Urn): ResourceApiCall[Resource.Of[R]] =
     fetchOne(urn).map(_.of[R])
+
+  inline def fetchOneAndConsume[R](urn: Urn): ResourceApiCall[Resource.InMemory[R]] =
+    fetchOne(urn).flatMap(_.of[R].consume)
 
   inline def save[R: Resource.Addressable](
       inline addressable: R
@@ -53,11 +59,20 @@ trait ResourceStore:
   inline def fetchRelAs[R](urn: Urn, relType: String): ResourceStream[Resource.Of[R]] =
     fetchRel(urn, relType).map(_.of[R])
 
+  inline def fetchRelAndConsume[R](urn: Urn, relType: String): ResourceStream[Resource.InMemory[R]] =
+    fetchRelAs[R](urn, relType).mapZIO(_.consume)
+
   inline def fetchOneRelAs[R](
       urn: Urn,
       relType: String
   ): ResourceApiCall[Resource.Of[R]] =
     fetchOneRel(urn, relType).map(_.of[R])
+
+  inline def fetchOneRelAndConsume[R](
+      urn: Urn,
+      relType: String
+  ): ResourceApiCall[Resource.InMemory[R]] =
+    fetchOneRel(urn, relType).flatMap(_.of[R].consume)
 
 object ResourceStore:
 
@@ -75,8 +90,16 @@ object ResourceStore:
   inline def fetchAs[R](urn: Urn): WithResourceStreamStore[Resource.Of[R]] = withStreamStore(
     _.fetchAs[R](urn)
   )
+  inline def fetchAndConsume[R](urn: Urn): WithResourceStreamStore[Resource.InMemory[R]] = withStreamStore(
+    _.fetchAndConsume(urn)
+  )
+
   inline def fetchOneAs[R](urn: Urn): WithResourceStore[Resource.Of[R]] = withStore(
     _.fetchOneAs[R](urn)
+  )
+
+  inline def fetchOneAndConsume[R](urn: Urn): WithResourceStore[Resource.InMemory[R]] = withStore(
+    _.fetchOneAndConsume(urn)
   )
 
   def save(resource: Resource): WithResourceStore[Resource] =
@@ -101,6 +124,12 @@ object ResourceStore:
   ): WithResourceStreamStore[Resource.Of[R]] =
     withStreamStore(_.fetchRelAs[R](urn, relType))
 
+  inline def fetchRelAndConsume[R: Resource.Addressable](
+      urn: Urn,
+      relType: String
+  ): WithResourceStreamStore[Resource.InMemory[R]] =
+    withStreamStore(_.fetchRelAndConsume(urn, relType))
+
   inline def transaction[R](body: ResourceStore => ResourceApiCall[R]): WithResourceStore[R] =
     for
       service <- ZIO.service[ResourceStore]
@@ -112,6 +141,11 @@ object ResourceStore:
       relType: String
   ): WithResourceStore[Resource.Of[R]] =
     withStore(_.fetchOneRelAs[R](urn, relType))
+
+  inline def fetchOneRelAndConsume[R: Resource.Addressable](
+      urn: Urn,
+      relType: String
+  ): WithResourceStore[Resource.InMemory[R]] = withStore(_.fetchOneRelAndConsume(urn, relType))
 
   def delete(urn: Urn): WithResourceStore[Resource] = withStore(_.delete(urn))
 

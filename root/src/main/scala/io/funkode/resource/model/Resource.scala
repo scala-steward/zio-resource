@@ -49,6 +49,13 @@ object Resource:
       links: ResourceLinks = Map.empty
   )
 
+  case class InMemory[R](
+      urn: Urn,
+      body: R,
+      etag: Option[Etag] = None,
+      links: ResourceLinks = Map.empty
+  )
+
   def empty(urn: Urn, resourceEtag: Option[Etag] = None, resourceLinks: ResourceLinks = Map.empty): Resource =
     fromJsonStream(urn, ZStream.empty, resourceEtag, resourceLinks)
 
@@ -112,6 +119,9 @@ object Resource:
           .mapError(e => ResourceError.SerializationError.apply("error serializing json", Option(e)))
       yield jsonBodyStream
       Resource.fromJsonStream(typedResource.urn, bodyStream)
+    inline def consume: IO[ResourceError, Resource.InMemory[R]] =
+      typedResource.body.map: body =>
+        Resource.InMemory(typedResource.urn, body, typedResource.etag, typedResource.links)
 
   given Show[Resource] = new Show[Resource]:
     def show(r: Resource): String =
