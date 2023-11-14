@@ -87,12 +87,16 @@ trait TransactionsExamples:
   val tx1Resource = Resource.fromJsonStream(tx1Urn, ZStream.fromIterable(tx1JsonString.getBytes()))
   val tx2Resource = Resource.fromJsonStream(tx2Urn, ZStream.fromIterable(tx2JsonString.getBytes()))
 
+  val TransactionsRel = Relationship[Transaction]("transactions")
+  val NetworkRel = Relationship[Network]("network")
+
 object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
 
   override def spec: Spec[TestEnvironment, Any] =
     suite("Arango ResourceStore should")(
       test("Store network, transaction and link/unlink them") {
         for
+          resourceStore <- ZIO.service[ResourceStore]
           storedNetworkResource <- ResourceStore.save(ethNetwork)
           storedNetwork <- storedNetworkResource.body
           fetchedNetworkJson <- ResourceStore.fetchOneAs[Json](ethNetworkUrn).body
@@ -105,14 +109,14 @@ object ArangoStoreSpec extends ZIOSpecDefault with TransactionsExamples:
           // link test
           _ <- ResourceStore.save(tx2)
           _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx1.urn)
-          _ <- ResourceStore.link(ethNetwork.urn, "transactions", tx2.urn)
-          _ <- ResourceStore.link(tx1.urn, "network", ethNetwork.urn)
+          _ <- TransactionsRel.linkFromTo(ethNetwork.urn, tx2.urn)(using resourceStore)
+          _ <- NetworkRel.linkFromTo(tx1.urn, ethNetwork.urn)(using resourceStore)
           _ <- ResourceStore.link(tx2.urn, "network", ethNetwork.urn)
-          networkTransactions <- ResourceStore
-            .fetchRelAs[Transaction](ethNetwork.urn, "transactions")
-            .mapZIO(_.body)
+          networkTransactions <- TransactionsRel
+            .fetchFromAndConsume(ethNetwork.urn)(using resourceStore)
+            .map(_.body)
             .runCollect
-          transactionNetworkResource <- ResourceStore.fetchOneRelAndConsume[Network](tx1.urn, "network")
+          transactionNetworkResource <- NetworkRel.fetchOneFromAndConsume(tx1.urn)(using resourceStore)
           transactionNetwork = transactionNetworkResource.body
           _ <- ResourceStore.delete(tx1.urn)
           netWorkTransactionsAfterDelete <- ResourceStore

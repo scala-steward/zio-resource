@@ -162,14 +162,14 @@ object ResourceStore:
     def body: ZIO[R, ResourceError, A] =
       resourceIO.flatMap(_.body)
 
-  extension [R, A](resourceIO: ZIO[R, ResourceError, A])
-    def ifNotFound(f: ResourceError.NotFoundError => ZIO[R, ResourceError, A]): ZIO[R, ResourceError, A] =
+  extension [R, E, Out](resourceIO: ZIO[R, ResourceError, Out])
+    def ifNotFound(f: ResourceError.NotFoundError => ZIO[R, E, Out]): ZIO[R, E | ResourceError, Out] =
       resourceIO.catchSome { case e: ResourceError.NotFoundError => f(e) }
 
-  extension [A](inline resourceIO: WithResourceStore[Resource.Of[A]])
-    inline def saveIfNotFound(inline alternativeResource: => A)(using
-        Addressable[A]
-    ): WithResourceStore[Resource.Of[A]] =
+  extension [R, Out](inline resourceIO: ZIO[R & ResourceStore, ResourceError, Resource.Of[Out]])
+    inline def saveIfNotFound(inline alternativeResource: => Out)(using
+        Addressable[Out]
+    ): ZIO[R & ResourceStore, ResourceError, Resource.Of[Out]] =
       resourceIO.ifNotFound(_ => ResourceStore.save(alternativeResource))
 
   trait InMemoryStore extends ResourceStore:
