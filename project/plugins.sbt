@@ -13,6 +13,6 @@ addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.11.1")
 addSbtPlugin("org.scoverage" %% "sbt-coveralls" % "1.3.11")
 addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "2.0.9")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.10.0")
-addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.5.12")
+addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.9.2")
 
 addDependencyTreePlugin
