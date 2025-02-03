@@ -9,7 +9,7 @@ inThisBuild(
   Seq(
     resolvers ++= Resolver.sonatypeOssRepos("releases"),
     organization := "io.funkode",
-    scalaVersion := "3.3.1",
+    scalaVersion := "3.3.5",
     versionScheme := Some("early-semver"),
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
